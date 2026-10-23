@@ -35,16 +35,13 @@ ensure_service_image() {
 }
 
 job_id="cch-ci-$(date +%s)-$$"
+printf '%s\n' "$job_id" > worker-resources
 network=$job_id
 test_image="cch-ci-tests:$job_id"
 image="cch-ci-image:$job_id"
 
 cleanup() {
-  for suffix in checks e2e app redis postgres; do
-    docker rm -f "$job_id-$suffix" >/dev/null 2>&1 || true
-  done
-  docker network rm "$network" >/dev/null 2>&1 || true
-  docker image rm "$image" "$test_image" >/dev/null 2>&1 || true
+  bash scripts/ci/cleanup.sh "$job_id"
 }
 trap cleanup EXIT
 trap 'exit 130' INT

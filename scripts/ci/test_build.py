@@ -81,7 +81,8 @@ class BuilderFallbackTests(unittest.TestCase):
         with patch.object(build, "run", side_effect=command):
             with self.assertRaises(subprocess.CalledProcessError):
                 build.run_remote(self.args, self.archive, self.output, "sha")
-        self.assertEqual(calls[-1][-1], "rm -rf -- /tmp/cch-ci.test")
+        self.assertIn('kill -TERM -- "-$worker_pid"', calls[-1][-1])
+        self.assertTrue(calls[-1][-1].endswith("rm -rf -- /tmp/cch-ci.test"))
 
     def test_check_mode_does_not_download_an_image(self):
         self.args.mode = "check"
@@ -96,7 +97,9 @@ class BuilderFallbackTests(unittest.TestCase):
             build.run_remote(self.args, self.archive, self.output, "sha")
         command = next(call.args[0][-1] for call in run.call_args_list
                        if call.args[0][0] == "ssh" and "timeout" in call.args[0][-1])
-        self.assertIn("'dev; touch /tmp/should-not-exist'", command)
+        self.assertIn("dev; touch /tmp/should-not-exist", command)
+        self.assertIn("setsid --wait bash -c", command)
+        self.assertIn("echo $$ > worker.pid; exec timeout", command)
 
     def test_remote_success_downloads_only_image_artifacts(self):
         with patch.object(build, "run", return_value=subprocess.CompletedProcess([], 0, "/tmp/cch-ci.test\n")) as run:
@@ -163,6 +166,16 @@ class BuilderFallbackTests(unittest.TestCase):
         with patch.object(build, "run"), patch.object(build.subprocess, "Popen", return_value=process):
             with self.assertRaises(subprocess.CalledProcessError):
                 build.run_local(self.args, self.archive, self.output, "sha")
+
+    def test_local_failure_cleans_recorded_resources_if_worker_trap_was_interrupted(self):
+        def start(command, cwd, **_):
+            Path(cwd, "worker-resources").write_text("cch-ci-test-owned")
+            return Mock(args=command, wait=Mock(return_value=1), poll=Mock(return_value=1))
+
+        with patch.object(build, "run") as run, patch.object(build.subprocess, "Popen", side_effect=start):
+            with self.assertRaises(subprocess.CalledProcessError):
+                build.run_local(self.args, self.archive, self.output, "sha")
+        self.assertEqual(run.call_args.args[0], ["bash", "scripts/ci/cleanup.sh", "cch-ci-test-owned"])
 
     def test_main_records_digest_and_never_archives_uncommitted_secrets(self):
         source = self.output / "repository"

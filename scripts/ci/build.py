@@ -29,22 +29,38 @@ def run_remote(args, archive, output, revision):
         ["ssh", *SSH_OPTIONS, args.host, "mktemp -d /tmp/cch-ci.XXXXXXXX"],
         capture_output=True, text=True, timeout=20,
     ).stdout.strip()
+    worker_finished = False
     try:
         run(["scp", *SSH_OPTIONS, str(archive), f"{args.host}:{remote_dir}/source.tar"],
             timeout=180)
-        command = (
-            f"cd {shlex.quote(remote_dir)} && tar -xf source.tar && "
-            + shlex.join(["timeout", "--signal=TERM", "--kill-after=30s", str(args.timeout),
-                          "bash", "scripts/ci/worker.sh", *worker_arguments(args, revision)])
-        )
+        worker = shlex.join(["timeout", "--signal=TERM", "--kill-after=30s",
+                             str(args.timeout), "bash", "scripts/ci/worker.sh",
+                             *worker_arguments(args, revision)])
+        command = f"cd {shlex.quote(remote_dir)} && tar -xf source.tar && " + shlex.join([
+            "setsid", "--wait", "bash", "-c", f"echo $$ > worker.pid; exec {worker}",
+        ])
         run(["ssh", *SSH_OPTIONS, args.host, command], timeout=args.timeout + 60)
+        worker_finished = True
         if args.mode != "check":
             for name in ("image.tar.gz", "image-reference.txt"):
                 run(["scp", *SSH_OPTIONS, f"{args.host}:{remote_dir}/output/{name}", str(output / name)],
                     timeout=600)
     finally:
         try:
-            run(["ssh", *SSH_OPTIONS, args.host, f"rm -rf -- {shlex.quote(remote_dir)}"],
+            cleanup = f"rm -rf -- {shlex.quote(remote_dir)}"
+            if not worker_finished:
+                # An interrupted SSH client does not reliably terminate remote children.
+                cleanup = (
+                    f"cd {shlex.quote(remote_dir)} && "
+                    'if [ -f worker.pid ]; then worker_pid=$(cat worker.pid); '
+                    'kill -TERM -- "-$worker_pid" 2>/dev/null || true; '
+                    'for attempt in 1 2 3 4 5; do '
+                    'kill -0 -- "-$worker_pid" 2>/dev/null || break; sleep 1; done; '
+                    'kill -KILL -- "-$worker_pid" 2>/dev/null || true; fi; '
+                    'if [ -f worker-resources ]; then '
+                    'bash scripts/ci/cleanup.sh "$(cat worker-resources)"; fi; ' + cleanup
+                )
+            run(["ssh", *SSH_OPTIONS, args.host, cleanup],
                 timeout=20)
         except (subprocess.SubprocessError, OSError):
             print(f"Remote temporary directory needs cleanup: {remote_dir}", flush=True)
@@ -70,6 +86,10 @@ def run_local(args, archive, output, revision):
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid, signal.SIGKILL)
                     process.wait()
+            resources = Path(directory, "worker-resources")
+            if resources.is_file():
+                run(["bash", "scripts/ci/cleanup.sh", resources.read_text().strip()],
+                    cwd=directory, timeout=30)
         if args.mode != "check":
             for name in ("image.tar.gz", "image-reference.txt"):
                 Path(directory, "output", name).replace(output / name)
@@ -119,4 +139,8 @@ def main():
 
 
 if __name__ == "__main__":
+    def terminate(_signum, _frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, terminate)
     main()

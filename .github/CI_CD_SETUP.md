@@ -29,7 +29,7 @@
 
 不再自动格式化并向分支提交代码，也不再自动升级版本或删除历史 tag/release。正式发布由维护者创建版本 tag，例如 `v0.9.9`，稳定 tag 产生 `v0.9.9` 与 `latest` 镜像。普通 main push 更新 `main`、`latest` 与 `main-<sha>`，开发分支产生 `<branch>` 与 `<branch>-<sha>`。所有 PR 继续以 `dev` 为目标分支。
 
-原有 Claude/Codex issue、review、文档和自动修复工作流默认关闭；需要时设置仓库变量 `ENABLE_AI_AUTOMATION=true` 并配置对应凭据。默认构建链路不需要这些服务。
+原有 Claude/Codex issue、review、文档和自动修复工作流默认关闭；当前 fork 的旧工作流也已在 GitHub Actions 设置中停用，避免 PR 使用尚未合并的旧默认分支配置。需要时先在 Actions 中重新启用所需工作流，再设置仓库变量 `ENABLE_AI_AUTOMATION=true` 并配置对应凭据。默认构建链路不需要这些服务。
 
 ## 安装与配置
 
@@ -43,7 +43,7 @@ bash scripts/ci/install-macos-runner.sh zhuzhu-debuger/claude-code-hub
 
 `~/.ssh/config` 中配置可免交互登录的 `acer-server` 别名；仓库变量 `CCH_BUILD_HOST` 可覆盖该别名。首次安装时人工确认 SSH 主机指纹。构建脚本不会关闭 SSH 主机校验。
 
-acer 需要 Docker、Buildx、Python/Git 非必需、GNU `timeout`、tar 和 gzip。构建工具与应用依赖全部来自固定版本容器和已提交的 `bun.lock`。
+acer 需要 Docker、Buildx、Python/Git 非必需、GNU `timeout`、`setsid`、tar 和 gzip。构建工具与应用依赖全部来自固定版本容器和已提交的 `bun.lock`。
 
 如 acer 的出网必须经过本机代理，在 acer 创建私有配置：
 
