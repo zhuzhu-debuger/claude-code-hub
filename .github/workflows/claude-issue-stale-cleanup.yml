@@ -8,6 +8,7 @@ on:
 
 jobs:
   stale-cleanup:
+    if: vars.ENABLE_AI_AUTOMATION == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

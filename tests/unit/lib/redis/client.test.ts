@@ -61,6 +61,17 @@ describe("buildRedisOptionsForUrl", () => {
     expect(result.isTLS).toBe(true);
   });
 
+  it("keeps reconnecting with bounded backoff instead of restarting on each request", () => {
+    const { options } = buildRedisOptionsForUrl("redis://localhost:6379");
+    const retry = options.retryStrategy as (attempt: number) => number;
+
+    expect([1, 2, 3, 4, 5, 6].map(retry)).toEqual([200, 400, 800, 1600, 3200, 6400]);
+    expect(retry(9)).toBe(30_000);
+    expect(retry(100_000)).toBe(30_000);
+    expect(options.enableOfflineQueue).toBe(false);
+    expect(options.autoResendUnfulfilledCommands).toBe(false);
+  });
+
   it.each(["redis://localhost:6379", "rediss://localhost:6380"])(
     "supports REDIS_COMMAND_TIMEOUT_MS override for %s",
     async (redisUrl) => {
@@ -113,6 +124,15 @@ describe("getRedisClient", () => {
     const first = getRedisClient({ allowWhenRateLimitDisabled: true });
     const second = getRedisClient({ allowWhenRateLimitDisabled: true });
     expect(first).toBe(second);
+    expect(mocks.MockRedis).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares the reconnecting client across a burst of requests", () => {
+    const first = getRedisClient();
+    mocks.state.status = "reconnecting";
+    for (let index = 0; index < 1000; index++) {
+      expect(getRedisClient()).toBe(first);
+    }
     expect(mocks.MockRedis).toHaveBeenCalledTimes(1);
   });
 

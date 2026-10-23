@@ -10,11 +10,11 @@ export const openApiDocumentConfig = {
       "REST management API for CC Hub. This HTTP surface is mounted separately from the proxy /v1 API and the deprecated /api/actions API while intentionally reusing existing server-side business actions during migration.",
     contact: {
       name: "CC Hub maintainers",
-      url: "https://github.com/ding113/claude-code-hub/issues",
+      url: "https://github.com/zhuzhu-debuger/claude-code-hub/issues",
     },
     license: {
       name: "MIT License",
-      url: "https://github.com/ding113/claude-code-hub/blob/main/LICENSE",
+      url: "https://github.com/zhuzhu-debuger/claude-code-hub/blob/main/LICENSE",
     },
   },
   servers: [

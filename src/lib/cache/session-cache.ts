@@ -9,6 +9,7 @@ import { TTLMap } from "@/lib/cache/ttl-map";
 
 class SessionCache<T> {
   private cache: TTLMap<string, T>;
+  private readonly inFlight = new Map<string, Promise<T>>();
   private readonly ttlSeconds: number;
 
   constructor(ttlSeconds: number = 2, maxSize: number = 1000) {
@@ -21,14 +22,38 @@ class SessionCache<T> {
   }
 
   set(key: string, data: T): void {
+    this.inFlight.delete(key);
     this.cache.set(key, data);
   }
 
+  getOrLoad(key: string, loader: () => Promise<T>): Promise<T> {
+    const cached = this.get(key);
+    if (cached !== null) return Promise.resolve(cached);
+
+    const existing = this.inFlight.get(key);
+    if (existing) return existing;
+
+    const pending = Promise.resolve()
+      .then(loader)
+      .then((data) => {
+        // An invalidation or newer write must not be undone by an older query.
+        if (this.inFlight.get(key) === pending) this.cache.set(key, data);
+        return data;
+      })
+      .finally(() => {
+        if (this.inFlight.get(key) === pending) this.inFlight.delete(key);
+      });
+    this.inFlight.set(key, pending);
+    return pending;
+  }
+
   delete(key: string): void {
+    this.inFlight.delete(key);
     this.cache.delete(key);
   }
 
   clear(): void {
+    this.inFlight.clear();
     this.cache.clear();
   }
 
@@ -117,6 +142,13 @@ export function setActiveSessionsCache(
   key: string = "active_sessions"
 ) {
   activeSessionsCache.set(key, data);
+}
+
+export function getOrLoadActiveSessionsCache(
+  key: "active_sessions" | "all_sessions",
+  loader: () => Promise<Parameters<typeof activeSessionsCache.set>[1]>
+) {
+  return activeSessionsCache.getOrLoad(key, loader);
 }
 
 export function getSessionDetailsCache(sessionId: string, userId: number) {

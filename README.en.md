@@ -6,11 +6,13 @@
 
 # CC Hub
 
+Maintained by zhuzhu-debuger, based on [ding113/claude-code-hub](https://github.com/ding113/claude-code-hub). See the [memory investigation](docs/troubleshooting/memory-stability-2026-10.md) for fixes and local/acer validation.
+
 **🚀 Intelligent AI API relay platform — the control center for multi-provider onboarding, elastic routing, and granular operations**
 
-[![Container Image](https://img.shields.io/badge/ghcr.io-ding113%2Fclaude--code--hub-181717?logo=github)](https://github.com/ding113/claude-code-hub/pkgs/container/claude-code-hub)
-[![License](https://img.shields.io/github/license/ding113/claude-code-hub)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/ding113/claude-code-hub)](https://github.com/ding113/claude-code-hub/stargazers)
+[![Container Image](https://img.shields.io/badge/ghcr.io-zhuzhu--debuger%2Fclaude--code--hub-181717?logo=github)](https://github.com/zhuzhu-debuger/claude-code-hub/pkgs/container/claude-code-hub)
+[![License](https://img.shields.io/github/license/zhuzhu-debuger/claude-code-hub)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/zhuzhu-debuger/claude-code-hub)](https://github.com/zhuzhu-debuger/claude-code-hub/stargazers)
 [![Telegram Group](https://img.shields.io/badge/Telegram-Join%20Group-blue?logo=telegram)](https://t.me/ygxz_group)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ding113/claude-code-hub)
 
@@ -130,7 +132,7 @@ The one-click deployment script **automatically handles** all of the following:
 
 ```bash
 # Download and run the deployment script
-curl -fsSL https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.sh -o deploy.sh
+curl -fsSL https://raw.githubusercontent.com/zhuzhu-debuger/claude-code-hub/main/scripts/deploy.sh -o deploy.sh
 chmod +x deploy.sh
 ./deploy.sh
 ```
@@ -138,7 +140,7 @@ chmod +x deploy.sh
 Or using wget:
 
 ```bash
-wget https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.sh
+wget https://raw.githubusercontent.com/zhuzhu-debuger/claude-code-hub/main/scripts/deploy.sh
 chmod +x deploy.sh
 ./deploy.sh
 ```
@@ -147,7 +149,7 @@ chmod +x deploy.sh
 
 ```powershell
 # Download and run the deployment script
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.ps1" -OutFile "deploy.ps1"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/zhuzhu-debuger/claude-code-hub/main/scripts/deploy.ps1" -OutFile "deploy.ps1"
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 .\deploy.ps1
 ```
@@ -175,7 +177,7 @@ The script will prompt you to select a deployment branch:
 1. **Clone and configure**
 
    ```bash
-   git clone https://github.com/ding113/claude-code-hub.git
+   git clone https://github.com/zhuzhu-debuger/claude-code-hub.git
    cd claude-code-hub
    cp .env.example .env
    ```
@@ -283,7 +285,7 @@ The repo ships a **dual-compatible** (k3s + standard Kubernetes) one-click deplo
 Quick start (auto-installs k3s if no cluster is detected):
 
 ```bash
-git clone https://github.com/ding113/claude-code-hub.git
+git clone https://github.com/zhuzhu-debuger/claude-code-hub.git
 cd claude-code-hub
 bash scripts/deploy-k8s.sh --install-k3s -y
 ```
@@ -387,7 +389,7 @@ This project builds on [zsio/claude-code-hub](https://github.com/zsio/claude-cod
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ding113/claude-code-hub&type=Date)](https://star-history.com/#ding113/claude-code-hub&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=zhuzhu-debuger/claude-code-hub&type=Date)](https://star-history.com/#zhuzhu-debuger/claude-code-hub&Date)
 
 ## 📜 License
 

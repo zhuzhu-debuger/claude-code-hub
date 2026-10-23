@@ -34,7 +34,8 @@ on:
 jobs:
   # Job for dev branch sync (triggered by workflow_dispatch)
   sync-dev:
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.task_type == 'sync-dev'
+    if: >-
+      vars.ENABLE_AI_AUTOMATION == 'true' && (github.event_name == 'workflow_dispatch' && github.event.inputs.task_type == 'sync-dev')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -223,11 +224,8 @@ jobs:
 
   auto-fix:
     # Only run on failure, skip Claude's own fix branches
-    if: |
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'failure' &&
-       !startsWith(github.event.workflow_run.head_branch, 'claude-fix-')) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.task_type == 'ci-fix')
+    if: >-
+      vars.ENABLE_AI_AUTOMATION == 'true' && ((github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' && !startsWith(github.event.workflow_run.head_branch, 'claude-fix-')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.task_type == 'ci-fix'))
     runs-on: ubuntu-latest
     permissions:
       contents: write

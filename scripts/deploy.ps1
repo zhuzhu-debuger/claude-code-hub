@@ -77,7 +77,7 @@ Examples:
   .\deploy.ps1 -Yes                               # Update existing deployment (auto-detected)
   .\deploy.ps1 -ForceNew -Yes                     # Force fresh install even if deployment exists
 
-For more information, visit: https://github.com/ding113/claude-code-hub
+For more information, visit: https://github.com/zhuzhu-debuger/claude-code-hub
 "@
     Write-Host $helpText
 }
@@ -426,7 +426,7 @@ services:
       start_period: 5s
 
   app:
-    image: ghcr.io/ding113/claude-code-hub:$IMAGE_TAG
+    image: ghcr.io/zhuzhu-debuger/claude-code-hub:$IMAGE_TAG
     container_name: claude-code-hub-app-$SUFFIX
     depends_on:
       postgres:

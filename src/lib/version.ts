@@ -32,7 +32,7 @@ export const APP_VERSION = normalizeVersionForDisplay(
  * 用于获取最新版本
  */
 export const GITHUB_REPO = {
-  owner: "ding113",
+  owner: "zhuzhu-debuger",
   repo: "claude-code-hub",
 };
 

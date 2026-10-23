@@ -2832,6 +2832,7 @@ export class ProxyResponseHandler {
     const statusCode = response.status;
 
     let finalResponse = response;
+    let responseTextForStats: string | null = null;
     let finalResponseBodyForSnapshot: string | null = null;
     let responseTransformFailed = false;
     const persistNonStreamAfterSnapshot = (targetResponse: Response) => {
@@ -2876,7 +2877,9 @@ export class ProxyResponseHandler {
           }
         );
 
-        const responseForStats = response.clone();
+        // Reuse the existing statistics branch; another clone would leave the
+        // first tee branch unread for the lifetime of the upstream response.
+        const responseForStats = responseForLog;
         const statusCode = response.status;
         const replaySpool = createBufferedReplaySpool(response);
         let replayCompletionScheduled = false;
@@ -3121,6 +3124,8 @@ export class ProxyResponseHandler {
             if (replaySpool && !replaySpool.isTerminal && !replayCompletionScheduled) {
               await replaySpool.abort("non_stream_finalize_error");
             }
+            discardBeforeResponseBodySnapshot(session);
+            void responseForStats.body?.cancel().catch(() => undefined);
             cleanupTaskAbortBinding();
             await finalizeNonStreamDiscoveryResources(session, discoveryLeaseLifecycle);
             releaseSessionAgent(session);
@@ -3172,8 +3177,10 @@ export class ProxyResponseHandler {
       } else {
         // ❌ 需要转换：客户端不是 Gemini 格式（如 OpenAI/Claude）
         try {
-          const responseForTransform = response.clone();
-          const responseText = await responseForTransform.text();
+          // Conversion and statistics share one consumed body. A separate tee
+          // would retain another full response while conversion is in progress.
+          const responseText = await responseForLog.text();
+          responseTextForStats = responseText;
           const responseData = JSON.parse(responseText) as GeminiResponse;
 
           const transformed = GeminiAdapter.transformResponse(responseData, false);
@@ -3208,6 +3215,9 @@ export class ProxyResponseHandler {
             statusText: response.statusText,
             headers: transformedHeaders,
           });
+          // The client receives the converted body; release the abandoned
+          // original branch instead of keeping its complete tee queue alive.
+          void response.body?.cancel().catch(() => undefined);
         } catch (error) {
           logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
           responseTransformFailed = true;
@@ -3347,7 +3357,9 @@ export class ProxyResponseHandler {
         }
 
         // ⭐ 非流式：读取完整响应体（会等待所有数据下载完成）
-        const responseText = await readResponseTextWithTaskActivity(responseForLog, taskId);
+        const responseText =
+          responseTextForStats ?? (await readResponseTextWithTaskActivity(responseForLog, taskId));
+        responseTextForStats = null;
         const clientVisibleResponseText = finalResponseBodyForSnapshot ?? responseText;
 
         // ⭐ 响应体读取完成：清除响应超时定时器
@@ -3807,6 +3819,9 @@ export class ProxyResponseHandler {
         if (replaySpool && !replaySpool.isTerminal && !replayCompletionScheduled) {
           await replaySpool.abort("non_stream_finalize_error");
         }
+        discardBeforeResponseBodySnapshot(session);
+        void responseForLog.body?.cancel().catch(() => undefined);
+        responseTextForStats = null;
         cleanupTaskAbortBinding();
         cleanupClientAbortListener();
         await finalizeNonStreamDiscoveryResources(session, discoveryLeaseLifecycle);

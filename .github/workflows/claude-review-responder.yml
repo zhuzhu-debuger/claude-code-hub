@@ -8,10 +8,8 @@ jobs:
   review-responder:
     # Respond to reviews requesting changes or asking questions
     # Skip bot reviews to prevent infinite loops
-    if: |
-      !endsWith(github.event.review.user.login, '[bot]') &&
-      (github.event.review.state == 'changes_requested' ||
-       contains(github.event.review.body, '@claude'))
+    if: >-
+      vars.ENABLE_AI_AUTOMATION == 'true' && (!endsWith(github.event.review.user.login, '[bot]') && (github.event.review.state == 'changes_requested' || contains(github.event.review.body, '@claude')))
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
