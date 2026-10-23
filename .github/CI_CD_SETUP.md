@@ -55,6 +55,28 @@ chmod 600 ~/.config/claude-code-hub/ci.env
 
 配置只影响 `cch-ci` 专用 BuildKit，不修改 Docker daemon、系统 DNS 或其他项目 builder。代理地址改变时，在没有构建运行的情况下执行 `docker buildx rm cch-ci`，下次构建会按新配置重建。不要把含账号密码的代理 URL 写入仓库。
 
+Mac 的后台 runner 可能无法访问 Docker Desktop 的钥匙串凭据，从而卡在 `docker-credential-desktop get`。构建只拉取公共基础镜像，可为本项目创建不含凭据助手的 Docker CLI 配置，并继续连接已有 Docker Desktop socket：
+
+```bash
+mkdir -p ~/.config/claude-code-hub/docker
+python3 - <<'PY'
+import json
+from pathlib import Path
+config = Path.home() / ".config/claude-code-hub/docker/config.json"
+config.write_text(json.dumps({
+    "auths": {},
+    "cliPluginsExtraDirs": [str(Path.home() / ".docker/cli-plugins")],
+}))
+PY
+```
+
+在 Mac 的 `~/.config/claude-code-hub/ci.env` 中加入以下两行；如需出网代理，再添加指向本机实际 HTTP 代理的 `HTTP_PROXY` 和 `HTTPS_PROXY`。Mac 的此配置与 acer 的 `CCH_BUILD_PROXY` 独立，不改变其他项目的 Docker 登录或网络设置。
+
+```bash
+export DOCKER_CONFIG="$HOME/.config/claude-code-hub/docker"
+export DOCKER_HOST="unix://$HOME/.docker/run/docker.sock"
+```
+
 GHCR 上传使用 GitHub 自动提供的 `GITHUB_TOKEN`，仅 hosted 发布 job 具有 `packages: write`。本机和 acer 不需要存储 GHCR 发布凭据。仓库需启用 Actions，并允许 workflow 写入 Packages。首次发布后可在 GitHub Packages 中按需设置镜像可见性。
 
 ## 本地执行与验证

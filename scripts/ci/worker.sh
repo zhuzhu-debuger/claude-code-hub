@@ -108,6 +108,7 @@ else
     exit 1
   fi
   docker run --name "$job_id-e2e" "${test_env[@]}" \
+    -e APP_BASE_URL=http://app:3000 \
     -e API_BASE_URL=http://app:3000/api/actions \
     -e API_E2E_BASE_URL=http://app:3000/api/v1 \
     -e AUTO_CLEANUP_TEST_DATA=true "$test_image" bun run test:e2e
