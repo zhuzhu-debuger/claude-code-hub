@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import http from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -19,6 +26,8 @@ const { values } = parseArgs({
     cycles: { type: "string", default: "1" },
     "replay-detached-ms": { type: "string", default: "300000" },
     "payload-bytes": { type: "string", default: "1048576" },
+    "request-body-bytes": { type: "string", default: "0" },
+    "early-disconnects": { type: "boolean", default: false },
   },
 });
 const concurrency = Number(values.concurrency);
@@ -26,6 +35,8 @@ const waves = Number(values.waves);
 const cycles = Number(values.cycles);
 const replayDetachedMs = Number(values["replay-detached-ms"]);
 const payloadBytes = Number(values["payload-bytes"]);
+const requestBodyBytes = Number(values["request-body-bytes"]);
+const earlyDisconnects = values["early-disconnects"];
 assert(Number.isSafeInteger(concurrency) && concurrency > 0 && concurrency <= 64);
 assert(Number.isSafeInteger(waves) && waves > 0 && waves <= 10);
 assert(Number.isSafeInteger(cycles) && cycles > 0 && cycles <= 10);
@@ -33,12 +44,30 @@ assert(
   Number.isSafeInteger(replayDetachedMs) && replayDetachedMs >= 10000 && replayDetachedMs <= 300000
 );
 assert(Number.isSafeInteger(payloadBytes) && payloadBytes >= 65536 && payloadBytes <= 5 * 1048576);
+assert(
+  Number.isSafeInteger(requestBodyBytes) && requestBodyBytes >= 0 && requestBodyBytes <= 5 * 1048576
+);
 const output = values.output
   ? path.resolve(values.output)
   : mkdtempSync(path.join(tmpdir(), "cch-memory-"));
 mkdirSync(output, { recursive: true });
 const standalone = path.join(root, ".next/standalone");
 assert(existsSync(path.join(standalone, "server.js")), "Run bun run build first");
+const testedSource = {
+  baseRevision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
+  workingTreeDirty:
+    execFileSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).trim().length >
+    0,
+  buildId: readFileSync(path.join(root, ".next/BUILD_ID"), "utf8").trim(),
+  sourceHashes: Object.fromEntries(
+    ["src/lib/memory/request-lifetime.ts", "src/app/v1/_lib/proxy-handler.ts"].map((file) => [
+      file,
+      createHash("sha256")
+        .update(readFileSync(path.join(root, file)))
+        .digest("hex"),
+    ])
+  ),
+};
 const runId = `cch-memory-${randomBytes(5).toString("hex")}`;
 const containers = [];
 let app;
@@ -50,6 +79,7 @@ const recoveries = [];
 const dbPassword = randomBytes(24).toString("hex");
 const adminToken = randomBytes(24).toString("hex");
 const sockets = new Set();
+const earlyDisconnectClients = new Map();
 const require = createRequire(import.meta.url);
 const { buildSseFrames } = require("../issue-1408-replay-oom/mock-upstream.cjs");
 const completedFrames = buildSseFrames(payloadBytes, "complete");
@@ -153,6 +183,7 @@ function request(base, key, mode, index) {
     let bytes = 0;
     let timer;
     let settled = false;
+    const requestKey = `${runId}-${mode}-${index}`;
     const digest = createHash("sha256");
     const body = JSON.stringify({
       model: "gpt-5.6",
@@ -160,15 +191,21 @@ function request(base, key, mode, index) {
       input: [
         {
           role: "user",
-          content: [{ type: "input_text", text: `CCH_SCENARIO_${mode} ${runId} ${index}` }],
+          content: [
+            {
+              type: "input_text",
+              text: `CCH_SCENARIO_${mode} ${runId} ${index}${"x".repeat(requestBodyBytes)}`,
+            },
+          ],
         },
       ],
-      prompt_cache_key: `${runId}-${mode}-${index}`,
+      prompt_cache_key: requestKey,
     });
     const finish = (error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      earlyDisconnectClients.delete(requestKey);
       if (error) reject(error);
       else resolve({ mode, index, bytes, firstByteMs, durationMs: performance.now() - started });
     };
@@ -184,6 +221,11 @@ function request(base, key, mode, index) {
         },
       },
       (res) => {
+        if (mode === "cancel-before-headers") {
+          res.destroy();
+          finish(new Error("Early-disconnect client unexpectedly received response headers"));
+          return;
+        }
         if (res.statusCode !== 200) {
           let errorBody = "";
           res.on("data", (chunk) => {
@@ -228,6 +270,14 @@ function request(base, key, mode, index) {
     req.once("error", (error) => {
       if (!settled) finish(error);
     });
+    if (mode === "cancel-before-headers") {
+      earlyDisconnectClients.set(requestKey, () => {
+        // The mock has received the full upstream request, so body parsing and
+        // admission have completed. Disconnect before it returns any headers.
+        req.destroy();
+        finish();
+      });
+    }
     req.end(body);
   });
 }
@@ -253,6 +303,14 @@ try {
     mockReceived++;
     mockActive++;
     res.once("close", () => mockActive--);
+    if (body.includes("CCH_SCENARIO_cancel-before-headers")) {
+      const requestKey = JSON.parse(body).prompt_cache_key;
+      const disconnect = earlyDisconnectClients.get(requestKey);
+      assert(disconnect, "Missing early-disconnect client for received upstream request");
+      disconnect();
+      await delay(500);
+      if (res.destroyed) return;
+    }
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
     const frames = body.includes("CCH_SCENARIO_cancel") ? hangingFrames : completedFrames;
     for (const frame of frames) {
@@ -374,13 +432,18 @@ try {
     () =>
       mockActive === 0 &&
       samples.at(-1)?.activeTasks === 0 &&
-      (samples.at(-1)?.requestMemory?.active ?? 0) === 0
+      samples.at(-1)?.requestMemory?.active === 0 &&
+      samples.at(-1)?.memoryLeases?.count === 0
   );
   await delay(1000);
   const baseline = await collectAfterGc();
   stage("baseline");
   for (let cycle = 0; cycle < cycles; cycle++) {
-    for (const mode of ["complete", "cancel"]) {
+    for (const mode of [
+      "complete",
+      "cancel",
+      ...(earlyDisconnects ? ["cancel-before-headers"] : []),
+    ]) {
       stage(`${mode}-${cycle}`);
       for (let wave = 0; wave < waves; wave++) {
         metrics.push(
@@ -397,7 +460,8 @@ try {
         () =>
           mockActive === 0 &&
           samples.at(-1)?.activeTasks === 0 &&
-          (samples.at(-1)?.requestMemory?.active ?? 0) === 0,
+          samples.at(-1)?.requestMemory?.active === 0 &&
+          samples.at(-1)?.memoryLeases?.count === 0,
         Math.max(90000, replayDetachedMs + 60000)
       );
       await delay(2000);
@@ -419,7 +483,7 @@ try {
     )
   );
   const expectedCompleted = concurrency * waves * cycles + 1;
-  const expectedCanceled = concurrency * waves * cycles;
+  const expectedCanceled = concurrency * waves * cycles * (earlyDisconnects ? 2 : 1);
   const statusCounts = JSON.parse(
     docker(
       "exec",
@@ -475,15 +539,18 @@ try {
   };
   const final = recoveries.at(-1).sample;
   assert.equal(final.activeTasks, 0);
-  assert.equal(final.requestMemory?.active ?? 0, 0);
+  assert.equal(final.requestMemory?.active, 0);
+  assert.equal(final.memoryLeases?.count, 0);
   const summary = {
     runId,
-    revision: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
+    revision: testedSource.baseRevision,
+    testedSource,
     node: process.version,
     concurrency,
     waves,
     cycles,
     payloadBytes,
+    requestBodyBytes,
     configuration: {
       replay: true,
       replayMaxDetachedMs: replayDetachedMs,
@@ -494,7 +561,9 @@ try {
       memoryBudgetBytes: 1073741824,
     },
     normalResponsesVerified: metrics.filter((entry) => entry.mode === "complete").length,
-    canceledClients: metrics.filter((entry) => entry.mode === "cancel").length,
+    canceledClients: metrics.filter((entry) => entry.mode !== "complete").length,
+    earlyDisconnectedClients: metrics.filter((entry) => entry.mode === "cancel-before-headers")
+      .length,
     mockReceived,
     baseline,
     final,

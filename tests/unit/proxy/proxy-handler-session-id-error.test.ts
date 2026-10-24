@@ -1,3 +1,4 @@
+import { Context } from "hono";
 import { describe, expect, test, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
@@ -159,6 +160,16 @@ async function expectMessageSuffixOnly(
   expect(body.error.message).toBe(`${expectedMessage} (cch_session_id: s_123)`);
 }
 
+function createContext(): Context {
+  return new Context(
+    new Request(h.session.requestUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(h.session.request.message),
+    })
+  );
+}
+
 describe("handleProxyRequest - session id on errors", async () => {
   const { handleProxyRequest } = await import("@/app/v1/_lib/proxy-handler");
 
@@ -169,7 +180,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.trackerCalls.length = 0;
     h.pipelineError = null;
     h.earlyResponse = ProxyResponses.buildError(400, "bad request");
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
 
     await expectMessageSuffixOnly(res, 400, "bad request");
   });
@@ -184,7 +195,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.forwardResponse = new Response("upstream", { status: 502 });
     h.dispatchedResponse = ProxyResponses.buildError(502, "bad gateway");
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
 
     await expectMessageSuffixOnly(res, 502, "bad gateway");
   });
@@ -199,7 +210,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.session.requestUrl = new URL("http://localhost/v1/unknown");
     h.session.request = { model: "gpt", message: { contents: [] } };
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
     await expectMessageSuffixOnly(res, 400, "bad request");
   });
 
@@ -218,7 +229,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.session.provider = { id: 1, name: "p" };
     h.session.isCountTokensRequest = () => false;
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
     expect(res.status).toBe(200);
     expect(h.trackerCalls).toEqual(["inc", "startRequest", "dec"]);
   });
@@ -249,7 +260,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.session.provider = { id: 1, name: "p" };
     h.session.isCountTokensRequest = () => isCountTokensRequest;
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
 
     expect(res.status).toBe(200);
     expect(h.trackerCalls).toEqual(["startRequest"]);
@@ -262,7 +273,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.pipelineError = null;
     h.earlyResponse = null;
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
     expect(res.status).toBe(401);
     expect(res.headers.get("x-cch-session-id")).toBeNull();
     const body = await res.json();
@@ -276,7 +287,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.pipelineError = new Error("pipeline boom");
     h.earlyResponse = null;
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
     expect(res.status).toBe(502);
     expect(await res.text()).toBe("handled");
   });
@@ -288,7 +299,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.pipelineError = null;
     h.earlyResponse = null;
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error.message).toBe("代理请求发生未知错误");
@@ -320,7 +331,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.session.highConcurrencyModeEnabled = null;
     h.session.rawCrossProviderFallbackEnabled = null;
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("ok");
@@ -349,7 +360,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.session.messageContext = null;
     h.session.provider = null;
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
 
     await expectMessageSuffixOnly(res, 400, "invalid input");
     expect(h.normalizeInputCalls).toBe(1);
@@ -376,7 +387,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.session.messageContext = { id: 1, user: { id: 1, name: "u" }, key: { name: "k" } };
     h.session.provider = { id: 1, name: "p" };
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
 
     await expectMessageSuffixOnly(res, 502, "fake streaming upstream failed");
     expect(h.session.highConcurrencyModeEnabled).toBe(true);
@@ -405,7 +416,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.session.messageContext = null;
     h.session.provider = null;
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
 
     expect(res.status).toBe(502);
     const body = await res.json();
@@ -433,7 +444,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.session.messageContext = null;
     h.session.provider = null;
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
 
     await expectMessageSuffixOnly(res, 400, "bad request");
 
@@ -460,7 +471,7 @@ describe("handleProxyRequest - session id on errors", async () => {
     h.session.messageContext = null;
     h.session.provider = null;
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
 
     expect(res.status).toBe(502);
     expect(await res.text()).toBe("handled");

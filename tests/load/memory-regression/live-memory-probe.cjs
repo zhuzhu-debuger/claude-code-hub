@@ -9,6 +9,7 @@ function sample(forcedGc = false) {
       ...process.memoryUsage(),
       activeTasks: globalThis.__ASYNC_TASK_MANAGER__?.getActiveTaskCount() ?? 0,
       requestMemory: globalThis[Symbol.for("cch.requestMemoryStats")]?.() ?? null,
+      memoryLeases: globalThis[Symbol.for("cch.memoryGovernor")]?.snapshot().leases ?? null,
     })}\n`
   );
 }

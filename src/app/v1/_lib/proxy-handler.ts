@@ -23,7 +23,7 @@ import { ProxyResponses } from "./proxy/responses";
 import { ProxySession } from "./proxy/session";
 
 export async function handleProxyRequest(c: Context): Promise<Response> {
-  return withRequestMemoryLifetime(() => handleOwnedProxyRequest(c));
+  return withRequestMemoryLifetime(() => handleOwnedProxyRequest(c), c.req.raw.signal);
 }
 
 async function handleOwnedProxyRequest(c: Context): Promise<Response> {

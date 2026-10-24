@@ -1,0 +1,308 @@
+{
+  "observedAt": "2026-10-24T18:35:49+08:00",
+  "scope": "isolated production build on local machine; no production changes",
+  "before": {
+    "testedState": "pre-fix standalone present before rebuild",
+    "handlerRegression": {
+      "passed": 1,
+      "failed": 2,
+      "failures": [
+        "disconnect before handler returns leaves active=1",
+        "8 unconsumed responses remain active after inbound abort"
+      ]
+    },
+    "isolated": {
+      "concurrency": 4,
+      "cycles": 1,
+      "requestBodyBytes": 262144,
+      "responsePayloadBytes": 65536,
+      "completed": 5,
+      "canceled": 8,
+      "ledgerRows": 13,
+      "backgroundTasks": 0,
+      "remainingActiveLifetimes": 4,
+      "draining": 0,
+      "stalledObservationSeconds": 90.1,
+      "outcome": "cleanup timeout after early disconnects"
+    },
+    "node": "v22.23.1"
+  },
+  "after": {
+    "testedSource": {
+      "testedState": "working-tree",
+      "baseRevision": "9fd9549a9f2c6216d1c97cc33acd92d9bca1ca74",
+      "workingTreeDirty": true,
+      "buildId": "5j7P-sVV0l6hbMQC74kKj",
+      "sourceHashes": {
+        "src/lib/memory/request-lifetime.ts": "b6381806ef4b9683e631795cbf47014e77581a2b8b8e66644f39403814f54608",
+        "src/app/v1/_lib/proxy-handler.ts": "fe579748b7ab196b0c503c3a7b91586179bc0132ca4c0866fe92a24455c62d6a"
+      }
+    },
+    "runtimeMatchesProjectPin": true,
+    "node": "v26.12.1",
+    "concurrency": 8,
+    "waves": 1,
+    "cycles": 2,
+    "requestBodyBytes": 1048576,
+    "responsePayloadBytes": 1048576,
+    "configuration": {
+      "replay": true,
+      "replayMaxDetachedMs": 10000,
+      "providerStreamingIdleTimeoutMs": 600000,
+      "responseDedup": true,
+      "streamGateMode": "enforce",
+      "memoryAdmissionEnabled": false,
+      "memoryBudgetBytes": 1073741824
+    },
+    "normalResponsesVerified": 16,
+    "canceledClients": 32,
+    "earlyDisconnectedClients": 16,
+    "upstreamRequests": 49,
+    "ledger": {
+      "rows": 49,
+      "completed": 17,
+      "inputTokens": 17,
+      "outputTokens": 17,
+      "costUsd": 5.1e-05
+    },
+    "statusCounts": {
+      "200": 17,
+      "499": 32
+    },
+    "baseline": {
+      "heapUsed": 86727856,
+      "external": 6181063,
+      "arrayBuffers": 1652529,
+      "activeTasks": 0,
+      "requestMemory": {
+        "active": 0,
+        "draining": 0,
+        "oldestDrainingAgeMs": 0,
+        "forcedTotal": 0,
+        "drainingLabels": {}
+      },
+      "memoryLeases": {
+        "count": 0,
+        "oldestAgeMs": 0,
+        "byTag": {}
+      }
+    },
+    "final": {
+      "heapUsed": 86486912,
+      "external": 6178199,
+      "arrayBuffers": 1652243,
+      "activeTasks": 0,
+      "requestMemory": {
+        "active": 0,
+        "draining": 0,
+        "oldestDrainingAgeMs": 0,
+        "forcedTotal": 0,
+        "drainingLabels": {}
+      },
+      "memoryLeases": {
+        "count": 0,
+        "oldestAgeMs": 0,
+        "byTag": {}
+      }
+    },
+    "earlyDisconnectRecoveries": [
+      {
+        "cycle": 0,
+        "heapUsed": 85972576,
+        "external": 6178199,
+        "arrayBuffers": 1652243,
+        "activeTasks": 0,
+        "requestMemory": {
+          "active": 0,
+          "draining": 0,
+          "oldestDrainingAgeMs": 0,
+          "forcedTotal": 0,
+          "drainingLabels": {}
+        },
+        "memoryLeases": {
+          "count": 0,
+          "oldestAgeMs": 0,
+          "byTag": {}
+        }
+      },
+      {
+        "cycle": 1,
+        "heapUsed": 86486912,
+        "external": 6178199,
+        "arrayBuffers": 1652243,
+        "activeTasks": 0,
+        "requestMemory": {
+          "active": 0,
+          "draining": 0,
+          "oldestDrainingAgeMs": 0,
+          "forcedTotal": 0,
+          "drainingLabels": {}
+        },
+        "memoryLeases": {
+          "count": 0,
+          "oldestAgeMs": 0,
+          "byTag": {}
+        }
+      }
+    ],
+    "peaks": {
+      "rss": 424460288,
+      "heapUsed": 184688576,
+      "external": 44135401,
+      "arrayBuffers": 38032730,
+      "activeTasks": 8
+    },
+    "firstByteMs": {
+      "median": 161.1591669999998,
+      "p95": 318.9794579999998,
+      "p95Method": "nearest-rank"
+    },
+    "outcome": "passed; each phase returned tasks, lifetimes, and leases to zero before GC"
+  },
+  "limitations": [
+    "Replay detached window was explicitly shortened to 10 seconds.",
+    "Two finite test cycles do not prove multi-hour production stability.",
+    "Process heap and buffers are not Docker container working-set measurements.",
+    "The source hashes describe the working tree used for this build, not the unmodified base revision.",
+    "The Node 22 fixture source hash was captured before the later metadata-only testedSource addition; Node 26 reran with that addition included."
+  ],
+  "additionalRuntimeVerifications": [
+    {
+      "testedSource": {
+        "testedState": "working-tree",
+        "baseRevision": "9fd9549a9f2c6216d1c97cc33acd92d9bca1ca74",
+        "buildId": "5j7P-sVV0l6hbMQC74kKj",
+        "sha256": {
+          "src/lib/memory/request-lifetime.ts": "b6381806ef4b9683e631795cbf47014e77581a2b8b8e66644f39403814f54608",
+          "src/app/v1/_lib/proxy-handler.ts": "fe579748b7ab196b0c503c3a7b91586179bc0132ca4c0866fe92a24455c62d6a",
+          "tests/load/memory-regression/run-isolated.mjs": "10a76bc685bbe7d0ec93a2aea9664f497a109d72e725bb97ceb53c6a5d0e6ea9",
+          "tests/load/memory-regression/live-memory-probe.cjs": "6ac7e06919dc477b19ae3d82f68384b3044f8ad10b902a4ee709bed51f3bff1c",
+          "tests/unit/proxy/memory-aware-response-owner.test.ts": "1b66b56a2481a89dee29d60128286d8de6990626d4b4c375b4ea2944657b522b"
+        }
+      },
+      "handlerRegression": {
+        "passed": 3,
+        "failed": 0
+      },
+      "node": "v22.23.1",
+      "concurrency": 8,
+      "waves": 1,
+      "cycles": 2,
+      "requestBodyBytes": 1048576,
+      "responsePayloadBytes": 1048576,
+      "configuration": {
+        "replay": true,
+        "replayMaxDetachedMs": 10000,
+        "providerStreamingIdleTimeoutMs": 600000,
+        "responseDedup": true,
+        "streamGateMode": "enforce",
+        "memoryAdmissionEnabled": false,
+        "memoryBudgetBytes": 1073741824
+      },
+      "normalResponsesVerified": 16,
+      "canceledClients": 32,
+      "earlyDisconnectedClients": 16,
+      "upstreamRequests": 49,
+      "ledger": {
+        "rows": 49,
+        "completed": 17,
+        "inputTokens": 17,
+        "outputTokens": 17,
+        "costUsd": 5.1e-05
+      },
+      "statusCounts": {
+        "200": 17,
+        "499": 32
+      },
+      "baseline": {
+        "heapUsed": 88207672,
+        "external": 5316231,
+        "arrayBuffers": 1212716,
+        "activeTasks": 0,
+        "requestMemory": {
+          "active": 0,
+          "draining": 0,
+          "oldestDrainingAgeMs": 0,
+          "forcedTotal": 0,
+          "drainingLabels": {}
+        },
+        "memoryLeases": {
+          "count": 0,
+          "oldestAgeMs": 0,
+          "byTag": {}
+        }
+      },
+      "final": {
+        "heapUsed": 85345240,
+        "external": 5314568,
+        "arrayBuffers": 1220614,
+        "activeTasks": 0,
+        "requestMemory": {
+          "active": 0,
+          "draining": 0,
+          "oldestDrainingAgeMs": 0,
+          "forcedTotal": 0,
+          "drainingLabels": {}
+        },
+        "memoryLeases": {
+          "count": 0,
+          "oldestAgeMs": 0,
+          "byTag": {}
+        }
+      },
+      "earlyDisconnectRecoveries": [
+        {
+          "cycle": 0,
+          "heapUsed": 84850600,
+          "external": 5314568,
+          "arrayBuffers": 1220614,
+          "activeTasks": 0,
+          "requestMemory": {
+            "active": 0,
+            "draining": 0,
+            "oldestDrainingAgeMs": 0,
+            "forcedTotal": 0,
+            "drainingLabels": {}
+          },
+          "memoryLeases": {
+            "count": 0,
+            "oldestAgeMs": 0,
+            "byTag": {}
+          }
+        },
+        {
+          "cycle": 1,
+          "heapUsed": 85345240,
+          "external": 5314568,
+          "arrayBuffers": 1220614,
+          "activeTasks": 0,
+          "requestMemory": {
+            "active": 0,
+            "draining": 0,
+            "oldestDrainingAgeMs": 0,
+            "forcedTotal": 0,
+            "drainingLabels": {}
+          },
+          "memoryLeases": {
+            "count": 0,
+            "oldestAgeMs": 0,
+            "byTag": {}
+          }
+        }
+      ],
+      "peaks": {
+        "rss": 295501824,
+        "heapUsed": 145622096,
+        "external": 49993567,
+        "arrayBuffers": 45895741,
+        "activeTasks": 8
+      },
+      "firstByteMs": {
+        "median": 374.4868540000002,
+        "p95": 542.6853750000009,
+        "p95Method": "nearest-rank"
+      },
+      "outcome": "passed; each phase returned tasks, lifetimes, and leases to zero before GC"
+    }
+  ]
+}

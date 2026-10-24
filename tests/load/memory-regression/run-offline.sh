@@ -23,6 +23,8 @@ bunx vitest run \
   src/app/v1/_lib/proxy/detached-stream-budget.test.ts \
   tests/unit/proxy/stream-gate-ttft-regression.test.ts \
   tests/unit/proxy/response-handler-nonstream-terminal.test.ts \
+  tests/unit/proxy/memory-aware-lifetime.test.ts \
+  tests/unit/proxy/memory-aware-response-owner.test.ts \
   --configLoader bundle
 
 node tests/load/memory-regression/sse-buffer-retention.mjs "$@"
