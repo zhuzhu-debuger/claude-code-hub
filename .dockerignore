@@ -1,6 +1,5 @@
 # Ignore git metadata
 .git
-.gitignore
 
 # Node modules and build artifacts
 node_modules

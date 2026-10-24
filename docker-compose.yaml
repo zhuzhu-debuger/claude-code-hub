@@ -46,7 +46,7 @@ services:
       start_period: 5s
 
   app:
-    image: ghcr.io/ding113/claude-code-hub:latest
+    image: ghcr.io/zhuzhu-debuger/claude-code-hub:latest
     depends_on:
       postgres:
         condition: service_healthy

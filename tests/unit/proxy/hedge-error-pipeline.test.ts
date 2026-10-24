@@ -1,3 +1,4 @@
+import { Context } from "hono";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 
@@ -111,6 +112,16 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
 
 import { ProxyError } from "@/app/v1/_lib/proxy/errors";
 
+function createContext(): Context {
+  return new Context(
+    new Request(h.session.requestUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(h.session.request.message),
+    })
+  );
+}
+
 describe("handleProxyRequest - hedge terminal error pipeline", async () => {
   const { handleProxyRequest } = await import("@/app/v1/_lib/proxy-handler");
 
@@ -127,7 +138,7 @@ describe("handleProxyRequest - hedge terminal error pipeline", async () => {
   });
 
   test("verboseProviderError=false 时，hedge 终态错误应返回标准 envelope，而不是裸 upstream message", async () => {
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
 
     expect(res.status).toBe(503);
     expect(res.headers.get("x-cch-session-id")).toBeNull();
@@ -145,7 +156,7 @@ describe("handleProxyRequest - hedge terminal error pipeline", async () => {
         "Quota exceeded for key sk-test-1234567890abcdef at https://api.vendor.example/v1/messages request_id=req_abc123",
     });
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
     const body = await res.json();
 
     expect(body.error.message).toContain("Quota exceeded");
@@ -163,7 +174,7 @@ describe("handleProxyRequest - hedge terminal error pipeline", async () => {
         "Quota exceeded for key sk-test-1234567890abcdef at https://api.vendor.example/v1/messages request_id=req_abc123",
     });
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
     const body = await res.json();
 
     expect(body.error.message).toBe("所有供应商暂时不可用，请稍后重试 (cch_session_id: s_hedge)");
@@ -182,7 +193,7 @@ describe("handleProxyRequest - hedge terminal error pipeline", async () => {
       },
     };
 
-    const res = await handleProxyRequest({} as any);
+    const res = await handleProxyRequest(createContext());
 
     expect(res.status).toBe(451);
     expect(res.headers.get("x-cch-session-id")).toBeNull();

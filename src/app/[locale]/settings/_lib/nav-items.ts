@@ -99,7 +99,7 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     iconName: "help-circle",
   },
   {
-    href: "https://github.com/ding113/claude-code-hub/issues",
+    href: "https://github.com/zhuzhu-debuger/claude-code-hub/issues",
     labelKey: "nav.feedback",
     label: "Feedback",
     external: true,

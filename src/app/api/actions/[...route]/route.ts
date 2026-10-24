@@ -2346,11 +2346,11 @@ HTTP 状态码:
     `,
     contact: {
       name: "项目维护团队",
-      url: "https://github.com/ding113/claude-code-hub/issues",
+      url: "https://github.com/zhuzhu-debuger/claude-code-hub/issues",
     },
     license: {
       name: "MIT License",
-      url: "https://github.com/ding113/claude-code-hub/blob/main/LICENSE",
+      url: "https://github.com/zhuzhu-debuger/claude-code-hub/blob/main/LICENSE",
     },
   },
   servers: getOpenAPIServers(),
@@ -2398,7 +2398,7 @@ HTTP 状态码:
   ],
   externalDocs: {
     description: "GitHub 仓库 - 查看完整文档、功能介绍和部署指南",
-    url: "https://github.com/ding113/claude-code-hub",
+    url: "https://github.com/zhuzhu-debuger/claude-code-hub",
   },
 };
 

@@ -44,7 +44,7 @@ deploy/k8s/
 | 占位符 | 含义 | 默认值 |
 |-------|------|--------|
 | `{{NAMESPACE}}` | K8s namespace | `claude-code-hub` |
-| `{{APP_IMAGE}}` | 应用镜像 | `ghcr.io/ding113/claude-code-hub:latest` |
+| `{{APP_IMAGE}}` | 应用镜像 | `ghcr.io/zhuzhu-debuger/claude-code-hub:latest` |
 | `{{APP_REPLICAS}}` | 基线副本数 | `2` |
 | `{{APP_HPA_MIN}}` / `{{APP_HPA_MAX}}` | HPA 上下限 | `2` / `6` |
 | `{{APP_SERVICE_TYPE}}` | Service 类型 | `ClusterIP` (有 Ingress) / `NodePort` (回落) |
@@ -71,12 +71,12 @@ deploy/k8s/
 
 ```bash
 # 集群侧一键部署 (推荐)
-# 默认等价 main 分支发布镜像 -> ghcr.io/ding113/claude-code-hub:latest
+# 默认等价 main 分支发布镜像 -> ghcr.io/zhuzhu-debuger/claude-code-hub:latest
 bash scripts/deploy-k8s.sh -y
 
 # 自定义 namespace / 镜像 / 域名
 bash scripts/deploy-k8s.sh \
-  -n my-hub -i ghcr.io/ding113/claude-code-hub:dev \
+  -n my-hub -i ghcr.io/zhuzhu-debuger/claude-code-hub:dev \
   --ingress-host hub.example.com -y
 
 # 仅渲染不部署 (用于审阅)

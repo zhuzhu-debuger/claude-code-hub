@@ -24,8 +24,8 @@ interface ActivityRow {
 }
 
 interface ConnectionRow {
+  pid: number;
   applicationName: string;
-  connections: number;
 }
 
 function delay(ms: number): Promise<void> {
@@ -89,7 +89,9 @@ run("PostgreSQL slow pool close integration", { concurrent: false }, () => {
     const observer = postgres(dsn, {
       max: 1,
       connect_timeout: 5,
-      connection: { application_name: "cch-pool-close-test:observer" },
+      // Other setup/module instances can own this same application_name, even
+      // when test files run serially. Keep one alive to verify PID isolation.
+      connection: { application_name: "claude-code-hub:control" },
     });
 
     const lockNamespace = 0x434348;
@@ -101,8 +103,10 @@ run("PostgreSQL slow pool close integration", { concurrent: false }, () => {
     let cleanup: Promise<void> | undefined;
 
     try {
-      const [{ databaseName }] = await observer<{ databaseName: string }[]>`
-        SELECT current_database() AS "databaseName"
+      const [{ databaseName, observerPid }] = await observer<
+        { databaseName: string; observerPid: number }[]
+      >`
+        SELECT current_database() AS "databaseName", pg_backend_pid() AS "observerPid"
       `;
       expect(databaseName).toMatch(/test/i);
 
@@ -131,31 +135,27 @@ run("PostgreSQL slow pool close integration", { concurrent: false }, () => {
       dbModule = await import("@/drizzle/db");
       const { runApplicationCleanup } = await import("@/lib/lifecycle/shutdown");
 
-      await Promise.all([
-        dbModule.getDb().execute(sql`SELECT 1`),
-        dbModule.runWithDataDbScope(() => dbModule?.getDb().execute(sql`SELECT 1`)),
-        dbModule.getMessageWriterDb().execute(sql`SELECT 1`),
-      ]);
-
-      const warmedConnections = await observer<ConnectionRow[]>`
-        SELECT application_name AS "applicationName", COUNT(*)::int AS connections
-        FROM pg_stat_activity
-        WHERE datname = current_database()
-          AND application_name IN (
-            'claude-code-hub:data',
-            'claude-code-hub:control',
-            'claude-code-hub:writer'
-          )
-        GROUP BY application_name
+      const identifyConnection = sql`
+        SELECT pg_backend_pid() AS pid, current_setting('application_name') AS "applicationName"
       `;
-      expect(
-        new Set(
-          warmedConnections
-            .filter(({ connections }) => connections > 0)
-            .map(({ applicationName }) => applicationName)
-        )
-      ).toEqual(
+      const warmedConnections = (
+        await Promise.all([
+          dbModule.getDb().execute(identifyConnection),
+          dbModule.runWithDataDbScope(() => dbModule?.getDb().execute(identifyConnection)),
+          dbModule.getMessageWriterDb().execute(identifyConnection),
+        ])
+      ).flatMap((rows) => Array.from(rows ?? []) as unknown as ConnectionRow[]);
+      // DB_POOL_MAX=3 gives each lane exactly one physical connection. Record
+      // those identities through the pools themselves, not global name counts.
+      expect(warmedConnections).toHaveLength(3);
+      expect(new Set(warmedConnections.map(({ applicationName }) => applicationName))).toEqual(
         new Set(["claude-code-hub:data", "claude-code-hub:control", "claude-code-hub:writer"])
+      );
+      const ownedPids = warmedConnections.map(({ pid }) => pid);
+      expect(new Set(ownedPids).size).toBe(3);
+      expect(ownedPids).not.toContain(observerPid);
+      const [dataConnection] = warmedConnections.filter(
+        ({ applicationName }) => applicationName === "claude-code-hub:data"
       );
 
       activeQuery = dbModule
@@ -173,10 +173,9 @@ run("PostgreSQL slow pool close integration", { concurrent: false }, () => {
             wait_event AS "waitEvent"
           FROM pg_stat_activity
           WHERE datname = current_database()
+            AND pid = ${dataConnection.pid}
             AND application_name = 'claude-code-hub:data'
             AND query LIKE '%pg_advisory_xact_lock%'
-          ORDER BY query_start DESC
-          LIMIT 1
         `;
         if (
           row?.state === "active" &&
@@ -244,14 +243,14 @@ run("PostgreSQL slow pool close integration", { concurrent: false }, () => {
           SELECT COUNT(*)::int AS connections
           FROM pg_stat_activity
           WHERE datname = current_database()
-            AND application_name IN (
-              'claude-code-hub:data',
-              'claude-code-hub:control',
-              'claude-code-hub:writer'
-            )
+            AND pid IN ${observer(ownedPids)}
         `;
         return connections === 0 ? true : undefined;
-      }, "all production database connections to close");
+      }, "all three owned database connections to close");
+      const [{ pid: survivingObserverPid }] = await observer<{ pid: number }[]>`
+        SELECT pg_backend_pid() AS pid
+      `;
+      expect(survivingObserverPid).toBe(observerPid);
     } finally {
       if (lockHeld) {
         await holder`SELECT pg_advisory_unlock(${lockNamespace}, ${lockId})`;

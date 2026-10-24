@@ -18,12 +18,10 @@ describe("deploy/Dockerfile runtime contract", () => {
     const nodeVersion = readRepoFile(".node-version").trim();
 
     expect(packageJson.engines.node).toBe(PATCHED_NODE_ENGINES);
-    expect(dockerfile).toContain(
-      `FROM --platform=$BUILDPLATFORM oven/bun:${bunVersion}-debian AS bun-runtime`
-    );
-    expect(dockerfile).toContain(
-      `FROM --platform=$BUILDPLATFORM node:${nodeVersion}-trixie-slim AS build-base`
-    );
+    expect(dockerfile).toContain(`FROM oven/bun:${bunVersion}-debian AS bun-runtime`);
+    expect(dockerfile).toContain(`FROM node:${nodeVersion}-trixie-slim AS build-base`);
+    // The Mac fallback must install native packages for the image's target architecture.
+    expect(dockerfile).not.toContain("--platform=$BUILDPLATFORM");
     expect(dockerfile).toContain("COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun");
   });
 
@@ -48,17 +46,28 @@ describe("deploy/Dockerfile runtime contract", () => {
     }
   });
 
-  it("sets up CI Node from .node-version", () => {
-    for (const file of [
-      ".github/workflows/dev.yml",
-      ".github/workflows/pr-check.yml",
-      ".github/workflows/release.yml",
-    ]) {
-      const workflow = readRepoFile(file);
+  it("uses the repository runtime versions in the private CI container", () => {
+    const worker = readRepoFile("scripts/ci/worker.sh");
+    const dockerfile = readRepoFile("scripts/ci/Dockerfile");
+    expect(worker).toContain('--build-arg "NODE_VERSION=$(cat .node-version)"');
+    expect(worker).toContain('--build-arg "BUN_VERSION=$(cat .bun-version)"');
+    expect(dockerfile).toContain("FROM node:${NODE_VERSION}-trixie-slim");
+    expect(dockerfile).toContain("FROM oven/bun:${BUN_VERSION}-debian");
+    for (const file of [".github/workflows/dev.yml", ".github/workflows/release.yml"]) {
+      expect(readRepoFile(file), file).toContain("uses: ./.github/workflows/build-image.yml");
+    }
+  });
 
-      expect(workflow, file).toContain("uses: actions/setup-node@");
-      expect(workflow, file).toContain("node-version-file: .node-version");
-      expect(workflow, file).not.toMatch(/^\s*node-version:/m);
+  it("installs the same frozen dependency graph on every build host", () => {
+    for (const file of [
+      "Dockerfile",
+      "deploy/Dockerfile",
+      "deploy/Dockerfile.dev",
+      "scripts/ci/Dockerfile",
+    ]) {
+      const dockerfile = readRepoFile(file);
+      expect(dockerfile, file).toContain("COPY package.json bun.lock ./");
+      expect(dockerfile, file).toContain("RUN bun install --frozen-lockfile");
     }
   });
 

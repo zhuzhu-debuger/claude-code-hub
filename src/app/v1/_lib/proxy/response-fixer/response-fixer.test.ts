@@ -74,6 +74,38 @@ describe("ResponseFixer", () => {
     });
   });
 
+  test("oversized non-stream bodies bypass repair without draining upstream", async () => {
+    const { ResponseFixer } = await import("./index");
+    const settings = await mocks.getCachedSystemSettings();
+    mocks.getCachedSystemSettings.mockResolvedValue({
+      ...settings,
+      responseFixerConfig: { ...settings.responseFixerConfig, maxFixSize: 16 },
+    });
+    const chunks = ['{"object":"response",', '"output":null}'];
+    let index = 0;
+    const pull = vi.fn((controller: ReadableStreamDefaultController<Uint8Array>) => {
+      if (index === chunks.length) controller.close();
+      else controller.enqueue(new TextEncoder().encode(chunks[index++]));
+    });
+    const source = new ReadableStream<Uint8Array>({ pull }, { highWaterMark: 0 });
+    const session = createSession();
+    session.originalFormat = "response";
+    const fixed = await ResponseFixer.process(
+      session,
+      new Response(source, { headers: { "content-type": "application/json" } })
+    );
+    expect(pull).toHaveBeenCalledTimes(1);
+    expect(await fixed.text()).toBe(chunks.join(""));
+    expect(session.getSpecialSettings()).toBeNull();
+    expect(source.locked).toBe(false);
+  });
+
+  test("bodyless responses preserve their status and empty body", async () => {
+    const { ResponseFixer } = await import("./index");
+    const response = new Response(null, { status: 204 });
+    expect(await ResponseFixer.process(createSession(), response)).toBe(response);
+  });
+
   test("禁用时应原样透传（不加 header，不写 specialSettings）", async () => {
     const { ResponseFixer } = await import("./index");
 

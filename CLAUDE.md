@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Info
 
-- **Source**: https://github.com/ding113/claude-code-hub
+- **Source**: https://github.com/zhuzhu-debuger/claude-code-hub
+- **Upstream**: https://github.com/ding113/claude-code-hub
 - **PR Target Branch**: `dev` (all pull requests must target the dev branch)
 
 ## Critical Rules

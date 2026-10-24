@@ -217,11 +217,35 @@ function responseOwner(lifetime: RequestMemoryLifetime) {
 }
 
 export async function withRequestMemoryLifetime(
-  operation: () => Promise<Response>
+  operation: () => Promise<Response>,
+  clientAbortSignal?: AbortSignal | null
 ): Promise<Response> {
   const lifetime = new RequestMemoryLifetime();
-  const { token, release } = responseOwner(lifetime);
+  const { token, release: releaseRoot } = responseOwner(lifetime);
   return storage.run(lifetime, async () => {
+    // Disconnect can precede the returned Response. Keep the operation's body
+    // ownership until it settles, independently of the downstream connection.
+    const releaseOperation = lifetime.retain("request-operation");
+    let responseReleased = false;
+    let cancelResponse: ((reason: unknown) => Promise<void>) | null = null;
+    const release = () => {
+      if (responseReleased) return;
+      responseReleased = true;
+      clientAbortSignal?.removeEventListener("abort", onClientAbort);
+      releaseRoot();
+    };
+    const onClientAbort = () => {
+      if (cancelResponse) {
+        // Cancellation belongs to the response source; downstream disconnection
+        // must not wait for its promise (for example, an unfinished tee branch).
+        void cancelResponse(clientAbortSignal?.reason).catch(() => {});
+      } else {
+        release();
+      }
+    };
+    if (clientAbortSignal?.aborted) onClientAbort();
+    else clientAbortSignal?.addEventListener("abort", onClientAbort, { once: true });
+
     try {
       const response = await operation();
       if (!response.body) {
@@ -229,19 +253,46 @@ export async function withRequestMemoryLifetime(
         return response;
       }
       const reader = response.body.getReader();
+      let ended = false;
+      // The incoming signal may outlive the Response. Its abort listener must
+      // not keep the wrapper body alive through a strong controller reference.
+      let clientController: WeakRef<ReadableStreamDefaultController<Uint8Array>>;
+      const cancelReader = (reason: unknown): Promise<void> => {
+        if (ended) return Promise.resolve();
+        ended = true;
+        const releaseCancellation = lifetime.retain("response-cancel");
+        try {
+          return reader.cancel(reason).finally(releaseCancellation);
+        } catch (error) {
+          releaseCancellation();
+          return Promise.reject(error);
+        } finally {
+          reader.releaseLock();
+          // A stuck cancel remains a background owner, so existing grace and
+          // body disposal still apply without leaving the response root active.
+          release();
+        }
+      };
       const wrapped = new Response(
         new ReadableStream<Uint8Array>(
           {
+            start(streamController) {
+              clientController = new WeakRef(streamController);
+            },
             pull(controller) {
               return storage.run(lifetime, async () => {
                 try {
                   const result = await reader.read();
+                  if (ended) return;
                   if (result.done) {
+                    ended = true;
                     reader.releaseLock();
                     release();
                     controller.close();
                   } else controller.enqueue(result.value);
                 } catch (error) {
+                  if (ended) return;
+                  ended = true;
                   reader.releaseLock();
                   release();
                   controller.error(error);
@@ -249,26 +300,29 @@ export async function withRequestMemoryLifetime(
               });
             },
             cancel(reason) {
-              return storage.run(lifetime, async () => {
-                try {
-                  await reader.cancel(reason);
-                } finally {
-                  reader.releaseLock();
-                  release();
-                }
-              });
+              return storage.run(lifetime, () => cancelReader(reason));
             },
           },
           { highWaterMark: 0 }
         ),
         { status: response.status, statusText: response.statusText, headers: response.headers }
       );
+      cancelResponse = (reason) => {
+        if (!ended) clientController.deref()?.error(reason);
+        return storage.run(lifetime, () => cancelReader(reason));
+      };
+      // The framework may discard a response returned after the socket closed,
+      // so neither pull nor cancel on its body is guaranteed to run.
+      if (clientAbortSignal?.aborted) onClientAbort();
       // 框架可能仅转交 body 并重建 Response；GC 兜底必须跟随仍被读取的流。
-      abandonedResponses.register(wrapped.body!, release, token);
+      // Abandonment also cancels the source and removes the signal listener.
+      if (!responseReleased) abandonedResponses.register(wrapped.body!, onClientAbort, token);
       return wrapped;
     } catch (error) {
       release();
       throw error;
+    } finally {
+      releaseOperation();
     }
   });
 }

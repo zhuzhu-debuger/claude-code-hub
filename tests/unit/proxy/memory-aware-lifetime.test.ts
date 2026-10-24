@@ -238,6 +238,225 @@ describe("请求内存确定性回收", () => {
     expect(getRequestMemoryLifetimeStats().forcedTotal).toBe(forcedBefore);
   });
 
+  it("底层 cancel 永不结束也会结束响应所有权并启动后台宽限", async () => {
+    vi.useFakeTimers();
+    const governor = new MemoryGovernor({
+      limit: 100,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const disposed = vi.fn();
+    const activeBefore = getRequestMemoryLifetimeStats().active;
+    const held = Promise.withResolvers<void>();
+    const response = await withRequestMemoryLifetime(async () => {
+      attachRequestMemory(governor.tryLease(100, "body_materialize")!);
+      onRequestMemoryForcedEnd(disposed);
+      return new Response(new ReadableStream({ cancel: () => held.promise }));
+    });
+
+    const cancellation = response.body!.cancel("disconnected");
+    expect(getRequestMemoryLifetimeStats().drainingLabels["response-cancel"]).toBe(1);
+    expect(governor.snapshot().usedBytes).toBe(100);
+
+    await vi.advanceTimersByTimeAsync(151_000);
+    expect(governor.snapshot().usedBytes).toBe(0);
+    expect(getRequestMemoryLifetimeStats().active).toBe(activeBefore);
+    expect(disposed).toHaveBeenCalledOnce();
+    held.resolve();
+    await cancellation;
+    expect(getRequestMemoryLifetimeStats().active).toBe(activeBefore);
+  });
+
+  it("响应返回前断线保留仍在运行的操作，迟到响应无需被框架消费即可回收", async () => {
+    const governor = new MemoryGovernor({
+      limit: 100,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const client = new AbortController();
+    const ready = Promise.withResolvers<void>();
+    const activeBefore = getRequestMemoryLifetimeStats().active;
+    const cancel = vi.fn();
+    const responsePromise = withRequestMemoryLifetime(async () => {
+      attachRequestMemory(governor.tryLease(100, "body_materialize")!);
+      await ready.promise;
+      expect(governor.snapshot().usedBytes).toBe(100);
+      return new Response(new ReadableStream({ cancel }));
+    }, client.signal);
+
+    client.abort(new Error("client disconnected before headers"));
+    expect(governor.snapshot().usedBytes).toBe(100);
+    expect(getRequestMemoryLifetimeStats().drainingLabels["request-operation"]).toBe(1);
+    ready.resolve();
+    await responsePromise;
+
+    await vi.waitFor(() => expect(governor.snapshot().usedBytes).toBe(0));
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(getRequestMemoryLifetimeStats().active).toBe(activeBefore);
+  });
+
+  it("tee 的后台分支未结束时取消客户端分支仍启动 draining，后台结束后自然回收", async () => {
+    const governor = new MemoryGovernor({
+      limit: 100,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const sourceCancel = vi.fn();
+    const [downstream, billing] = new ReadableStream<Uint8Array>({ cancel: sourceCancel }).tee();
+    let finishBilling!: () => void;
+    const response = await withRequestMemoryLifetime(async () => {
+      attachRequestMemory(governor.tryLease(100)!);
+      finishBilling = retainCurrentRequestMemory("billing");
+      return new Response(downstream);
+    });
+
+    const cancellation = response.body!.cancel("client disconnected");
+    expect(sourceCancel).not.toHaveBeenCalled();
+    expect(getRequestMemoryLifetimeStats().drainingLabels).toMatchObject({
+      billing: 1,
+      "response-cancel": 1,
+    });
+    expect(governor.snapshot().usedBytes).toBe(100);
+    await billing.cancel("billing complete");
+    await cancellation;
+    expect(governor.snapshot().usedBytes).toBe(100);
+    finishBilling();
+    expect(governor.snapshot().usedBytes).toBe(0);
+    expect(sourceCancel).toHaveBeenCalledOnce();
+  });
+
+  it("未消费响应的入站断线释放根，但不提前归还后台计费消费者的内存", async () => {
+    const governor = new MemoryGovernor({
+      limit: 100,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const client = new AbortController();
+    const cancel = vi.fn();
+    let finishBilling!: () => void;
+    await withRequestMemoryLifetime(async () => {
+      attachRequestMemory(governor.tryLease(100)!);
+      finishBilling = retainCurrentRequestMemory("billing");
+      return new Response(new ReadableStream({ cancel }));
+    }, client.signal);
+
+    client.abort();
+    await Promise.resolve();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(governor.snapshot().usedBytes).toBe(100);
+    expect(getRequestMemoryLifetimeStats().drainingLabels.billing).toBe(1);
+    finishBilling();
+    await vi.waitFor(() => expect(governor.snapshot().usedBytes).toBe(0));
+  });
+
+  it("正常 EOF 移除入站断线监听器，迟到 abort 不重复取消或释放", async () => {
+    const governor = new MemoryGovernor({
+      limit: 100,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const client = new AbortController();
+    const removeListener = vi.spyOn(client.signal, "removeEventListener");
+    const cancel = vi.fn();
+    const lease = governor.tryLease(100)!;
+    const release = vi.spyOn(lease, "release");
+    const response = await withRequestMemoryLifetime(async () => {
+      attachRequestMemory(lease);
+      return new Response(
+        new ReadableStream({ start: (controller) => controller.close(), cancel })
+      );
+    }, client.signal);
+
+    await response.text();
+    expect(removeListener).toHaveBeenCalledWith("abort", expect.any(Function));
+    client.abort();
+    expect(cancel).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it("入站信号已经取消时，操作中新挂载的正文仍有明确所有者", async () => {
+    const governor = new MemoryGovernor({
+      limit: 100,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const client = new AbortController();
+    client.abort();
+    const activeBefore = getRequestMemoryLifetimeStats().active;
+    const response = await withRequestMemoryLifetime(async () => {
+      expect(attachRequestMemory(governor.tryLease(100)!)).toBe(true);
+      expect(getRequestMemoryLifetimeStats().drainingLabels["request-operation"]).toBe(1);
+      return new Response(null, { status: 204 });
+    }, client.signal);
+
+    expect(response.status).toBe(204);
+    expect(governor.snapshot().usedBytes).toBe(0);
+    expect(getRequestMemoryLifetimeStats().active).toBe(activeBefore);
+  });
+
+  it("读取进行中的断线只取消一次，取消失败不阻塞额度回收", async () => {
+    const governor = new MemoryGovernor({
+      limit: 100,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const client = new AbortController();
+    const disconnected = new Error("client disconnected during read");
+    const cancel = vi.fn(() => Promise.reject(new Error("source cancel rejected")));
+    const lease = governor.tryLease(100)!;
+    const release = vi.spyOn(lease, "release");
+    const response = await withRequestMemoryLifetime(async () => {
+      attachRequestMemory(lease);
+      return new Response(new ReadableStream({ cancel }));
+    }, client.signal);
+    const reader = response.body!.getReader();
+    const read = reader.read();
+    const rejected = expect(read).rejects.toBe(disconnected);
+    await Promise.resolve();
+    client.abort(disconnected);
+    await rejected;
+    await vi.waitFor(() => expect(governor.snapshot().usedBytes).toBe(0));
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(release).toHaveBeenCalledOnce();
+    reader.releaseLock();
+  });
+
+  it("断线后操作本身卡住也进入既有后台宽限，迟到返回不重复释放", async () => {
+    vi.useFakeTimers();
+    const governor = new MemoryGovernor({
+      limit: 100,
+      remote: false,
+      monitor: false,
+      enabled: true,
+    });
+    const client = new AbortController();
+    const ready = Promise.withResolvers<void>();
+    const disposed = vi.fn();
+    const activeBefore = getRequestMemoryLifetimeStats().active;
+    const responsePromise = withRequestMemoryLifetime(async () => {
+      attachRequestMemory(governor.tryLease(100)!);
+      onRequestMemoryForcedEnd(disposed);
+      await ready.promise;
+      return new Response("late error");
+    }, client.signal);
+
+    client.abort();
+    await vi.advanceTimersByTimeAsync(151_000);
+    expect(governor.snapshot().usedBytes).toBe(0);
+    expect(getRequestMemoryLifetimeStats().active).toBe(activeBefore);
+    expect(disposed).toHaveBeenCalledOnce();
+    ready.resolve();
+    await responsePromise;
+    expect(getRequestMemoryLifetimeStats().active).toBe(activeBefore);
+  });
+
   it("作用域结束后再挂载返回 false，由调用方走 GC 兜底而不是抛错", async () => {
     const governor = new MemoryGovernor({
       limit: 10,

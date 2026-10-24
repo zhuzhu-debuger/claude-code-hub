@@ -6,11 +6,13 @@
 
 # CC Hub
 
+本仓库由 zhuzhu-debuger 独立维护，源自 [ding113/claude-code-hub](https://github.com/ding113/claude-code-hub)。内存优化与本机/acer 构建方案见 [诊断报告](docs/troubleshooting/memory-stability-2026-10.md)。
+
 **🚀 智能 AI API 代理中转服务平台｜面向团队的多供应商统一接入、弹性调度与精细化运营中心**
 
-[![Container Image](https://img.shields.io/badge/ghcr.io-ding113%2Fclaude--code--hub-181717?logo=github)](https://github.com/ding113/claude-code-hub/pkgs/container/claude-code-hub)
-[![License](https://img.shields.io/github/license/ding113/claude-code-hub)](LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/ding113/claude-code-hub)](https://github.com/ding113/claude-code-hub/stargazers)
+[![Container Image](https://img.shields.io/badge/ghcr.io-zhuzhu--debuger%2Fclaude--code--hub-181717?logo=github)](https://github.com/zhuzhu-debuger/claude-code-hub/pkgs/container/claude-code-hub)
+[![License](https://img.shields.io/github/license/zhuzhu-debuger/claude-code-hub)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/zhuzhu-debuger/claude-code-hub)](https://github.com/zhuzhu-debuger/claude-code-hub/stargazers)
 [![Telegram Group](https://img.shields.io/badge/Telegram-交流群-blue?logo=telegram)](https://t.me/ygxz_group)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ding113/claude-code-hub)
 
@@ -130,7 +132,7 @@ AIGoCode 为 CCH 的用户提供了特别福利，通过此链接注册的用户
 
 ```bash
 # 下载并运行部署脚本
-curl -fsSL https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.sh -o deploy.sh
+curl -fsSL https://raw.githubusercontent.com/zhuzhu-debuger/claude-code-hub/main/scripts/deploy.sh -o deploy.sh
 chmod +x deploy.sh
 ./deploy.sh
 ```
@@ -138,7 +140,7 @@ chmod +x deploy.sh
 或者使用 wget：
 
 ```bash
-wget https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.sh
+wget https://raw.githubusercontent.com/zhuzhu-debuger/claude-code-hub/main/scripts/deploy.sh
 chmod +x deploy.sh
 ./deploy.sh
 ```
@@ -147,7 +149,7 @@ chmod +x deploy.sh
 
 ```powershell
 # 下载并运行部署脚本
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/ding113/claude-code-hub/main/scripts/deploy.ps1" -OutFile "deploy.ps1"
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/zhuzhu-debuger/claude-code-hub/main/scripts/deploy.ps1" -OutFile "deploy.ps1"
 Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 .\deploy.ps1
 ```
@@ -175,7 +177,7 @@ Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
 1. **克隆项目并配置环境**
 
    ```bash
-   git clone https://github.com/ding113/claude-code-hub.git
+   git clone https://github.com/zhuzhu-debuger/claude-code-hub.git
    cd claude-code-hub
    cp .env.example .env
    ```
@@ -288,7 +290,7 @@ Docker Compose 是**首选部署方式**，自动配置数据库、Redis 和应�
 最简命令（本机无集群时会提示自动安装 k3s）：
 
 ```bash
-git clone https://github.com/ding113/claude-code-hub.git
+git clone https://github.com/zhuzhu-debuger/claude-code-hub.git
 cd claude-code-hub
 bash scripts/deploy-k8s.sh --install-k3s -y
 ```
@@ -400,7 +402,7 @@ cch doctor            # 诊断集群与部署状态
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=ding113/claude-code-hub&type=Date)](https://star-history.com/#ding113/claude-code-hub&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=zhuzhu-debuger/claude-code-hub&type=Date)](https://star-history.com/#zhuzhu-debuger/claude-code-hub&Date)
 
 ## 📜 许可证 License
 

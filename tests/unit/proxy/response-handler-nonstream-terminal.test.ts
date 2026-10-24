@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { Context } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GeminiAdapter } from "@/app/v1/_lib/gemini/adapter";
@@ -408,12 +409,14 @@ describe("ProxyResponseHandler.dispatch nonstream terminal behavior", () => {
     const upstreamBody =
       '{"candidates":[{"content":{"role":"model","parts":[{"text":"hello"}]},"finishReason":"STOP","index":0}],"modelVersion":"gemini-2.5-flash"}';
 
-    const returned = await ProxyResponseHandler.dispatch(
-      session,
-      new Response(upstreamBody, {
-        headers: { "content-type": "application/json" },
-      })
-    );
+    const upstream = new Response(upstreamBody, {
+      headers: { "content-type": "application/json" },
+    });
+    const clone = vi.spyOn(upstream, "clone");
+    const returned = await ProxyResponseHandler.dispatch(session, upstream);
+    // Conversion consumes the same statistics branch and cancels the unused original.
+    expect(clone).toHaveBeenCalledTimes(1);
+    expect(upstream.bodyUsed).toBe(true);
     const returnedBody = await returned.text();
     await settleTasks();
 
@@ -471,15 +474,16 @@ describe("ProxyResponseHandler.dispatch nonstream terminal behavior", () => {
     const upstreamBody =
       '{"candidates":[{"content":{"role":"model","parts":[{"text":"hello"}]},"finishReason":"STOP","index":0}],"modelVersion":"gemini-2.5-flash"}';
 
-    const returned = await ProxyResponseHandler.dispatch(
-      session,
-      new Response(upstreamBody, {
-        headers: { "content-type": "application/json" },
-      })
-    );
+    const upstream = new Response(upstreamBody, {
+      headers: { "content-type": "application/json" },
+    });
+    const clone = vi.spyOn(upstream, "clone");
+    const returned = await ProxyResponseHandler.dispatch(session, upstream);
     await expect(returned.text()).resolves.toBe(upstreamBody);
     await settleTasks();
 
+    // One consumed statistics branch; an unused second tee retains the entire body.
+    expect(clone).toHaveBeenCalledTimes(1);
     const observed = replayControl.spool.observe.mock.calls[0]?.[0] as Uint8Array;
     expect(new TextDecoder().decode(observed)).toBe(upstreamBody);
     expect(replayControl.spool.completeAfterBilling).toHaveBeenCalledWith(MESSAGE.id);

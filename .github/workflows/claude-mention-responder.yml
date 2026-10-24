@@ -9,9 +9,8 @@ on:
 jobs:
   mention-responder:
     # Only respond to @claude mentions, skip bot comments
-    if: |
-      contains(github.event.comment.body, '@claude') &&
-      !endsWith(github.actor, '[bot]')
+    if: >-
+      vars.ENABLE_AI_AUTOMATION == 'true' && (contains(github.event.comment.body, '@claude') && !endsWith(github.actor, '[bot]'))
     runs-on: ubuntu-latest
     permissions:
       contents: write

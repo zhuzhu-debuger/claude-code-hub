@@ -1,112 +1,30 @@
-name: PR Build Check
+name: PR metadata check
 
-# 在向 main 或 dev 分支提交 PR 时触发
 on:
   pull_request:
-    branches:
-      - main # 稳定版本分支
-      - dev # 开发版本分支
+    branches: [dev, main]
     types: [opened, synchronize, reopened]
 
-env:
-  REGISTRY: docker.io
-  IMAGE_NAME: ding113/claude-code-hub
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  # 代码质量检查任务
-  code-quality:
+  review-source:
     runs-on: ubuntu-latest
-    name: Code Quality Check
-    timeout-minutes: 15
-
+    timeout-minutes: 3
     steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v6
-
-      - name: 📦 Setup Bun
-        uses: oven-sh/setup-bun@v2
+      # Do not checkout or execute pull-request code on the private builders.
+      - name: Explain trusted build coverage
+        uses: actions/github-script@v9
         with:
-          bun-version-file: .bun-version
-
-      - name: 🟢 Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .node-version
-
-      - name: Cache Bun package cache
-        uses: actions/cache@v5
-        with:
-          path: ~/.bun/install/cache
-          # This repo intentionally does not track Bun lockfiles; rotate cache on package/runtime inputs.
-          key: ${{ runner.os }}-bun-${{ hashFiles('package.json', '.bun-version') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
-
-      - name: 📦 Install dependencies
-        timeout-minutes: 8
-        # No lockfile is committed in this repository, so use a non-frozen install.
-        run: bun install
-
-      - name: 🔍 Type check
-        run: bun run typecheck
-
-      - name: 🎨 Format check
-        run: bun run format:check
-
-      - name: 🛡️ Validate migrations
-        run: bun run validate:migrations
-
-      - name: Code quality checks passed
-        run: |
-          echo "All code quality checks passed!"
-          echo "📝 Type checking: OK"
-          echo "🎨 Code formatting: OK"
-          echo "🛡️ Migration validation: OK"
-
-  # PR 构建测试任务（不推送镜像）
-  build-check:
-    runs-on: ubuntu-latest
-    name: Docker Build Test
-    timeout-minutes: 45
-
-    steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v6
-
-      - name: 🔧 Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: 📋 Extract metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=pr
-            type=sha,prefix=pr-
-
-      - name: 🏗️ Build Docker image (Test Only - No Push)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./deploy/Dockerfile
-          platforms: linux/amd64 # PR检查使用单一架构提高速度
-          push: false # 永远不推送，仅测试构建
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build check passed
-        run: |
-          echo "Docker image build successful!"
-          echo "📦 Image tags that would be used: ${{ steps.meta.outputs.tags }}"
-          echo "🔍 All checks passed - PR is ready for review"
-
-      # 如果构建失败，这个步骤会提供更详细的信息
-      - name: ❌ Build failed diagnostics
-        if: failure()
-        run: |
-          echo "❌ Build or test failed!"
-          echo "Please check the logs above for details."
-          docker images
+          script: |
+            const pr = context.payload.pull_request;
+            const internal = pr.head.repo?.full_name === context.repo.owner + '/' + context.repo.repo;
+            await core.summary.addHeading('Build verification').addRaw(internal
+              ? 'The push workflow tests and builds this branch on acer-server, with local fallback. Review that workflow result before merging.'
+              : 'This external pull request has not run on private infrastructure. After reviewing the code, a maintainer can push it to a branch in this repository to run the full tests and image build.'
+            ).write();

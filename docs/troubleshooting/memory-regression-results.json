@@ -1,0 +1,391 @@
+{
+  "date": "2026-10-23",
+  "platform": "macOS ARM64",
+  "evidenceBoundary": "Isolated mock workload; forced GC at quiet snapshots. Not a production or cross-version latency benchmark.",
+  "runs": [
+    {
+      "runId": "cch-memory-2b5c656201",
+      "revision": "f22de1815bf27ad3e86099511d5a325da9843211",
+      "node": "v26.12.1",
+      "concurrency": 32,
+      "waves": 2,
+      "cycles": 2,
+      "payloadBytes": 1048576,
+      "configuration": {
+        "replay": true,
+        "replayMaxDetachedMs": 10000,
+        "responseDedup": true,
+        "memoryBudgetBytes": 1073741824,
+        "streamGateMode": "enforce",
+        "memoryAdmissionEnabled": false,
+        "providerStreamingIdleTimeoutMs": 120000
+      },
+      "normalResponsesVerified": 128,
+      "canceledClients": 128,
+      "mockReceived": 257,
+      "baseline": {
+        "cchMemoryProbe": true,
+        "ts": 1792729151713,
+        "forcedGc": true,
+        "rss": 274202624,
+        "heapTotal": 148193280,
+        "heapUsed": 84542176,
+        "external": 5132487,
+        "arrayBuffers": 603953,
+        "activeTasks": 0,
+        "requestMemory": {
+          "active": 0,
+          "draining": 0,
+          "oldestDrainingAgeMs": 0,
+          "forcedTotal": 0,
+          "drainingLabels": {}
+        }
+      },
+      "final": {
+        "cchMemoryProbe": true,
+        "ts": 1792729194759,
+        "forcedGc": true,
+        "rss": 362905600,
+        "heapTotal": 91209728,
+        "heapUsed": 86469576,
+        "external": 5202293,
+        "arrayBuffers": 676337,
+        "activeTasks": 0,
+        "requestMemory": {
+          "active": 0,
+          "draining": 0,
+          "oldestDrainingAgeMs": 0,
+          "forcedTotal": 0,
+          "drainingLabels": {}
+        }
+      },
+      "peaks": {
+        "rss": 550518784,
+        "heapUsed": 199679688,
+        "external": 64654155,
+        "arrayBuffers": 60128199,
+        "activeTasks": 57
+      },
+      "ledger": {
+        "rows": 257,
+        "completed": 129,
+        "inputTokens": 129,
+        "outputTokens": 129,
+        "costUsd": 0.000387
+      },
+      "statusCounts": {
+        "200": 129,
+        "499": 128
+      },
+      "recoveries": [
+        {
+          "cycle": 0,
+          "mode": "complete",
+          "sample": {
+            "cchMemoryProbe": true,
+            "ts": 1792729159774,
+            "forcedGc": true,
+            "rss": 458080256,
+            "heapTotal": 96829440,
+            "heapUsed": 85640808,
+            "external": 5065460,
+            "arrayBuffers": 539504,
+            "activeTasks": 0,
+            "requestMemory": {
+              "active": 0,
+              "draining": 0,
+              "oldestDrainingAgeMs": 0,
+              "forcedTotal": 0,
+              "drainingLabels": {}
+            }
+          }
+        },
+        {
+          "cycle": 0,
+          "mode": "cancel",
+          "sample": {
+            "cchMemoryProbe": true,
+            "ts": 1792729173771,
+            "forcedGc": true,
+            "rss": 512557056,
+            "heapTotal": 162250752,
+            "heapUsed": 85716056,
+            "external": 5202282,
+            "arrayBuffers": 676326,
+            "activeTasks": 0,
+            "requestMemory": {
+              "active": 0,
+              "draining": 0,
+              "oldestDrainingAgeMs": 0,
+              "forcedTotal": 0,
+              "drainingLabels": {}
+            }
+          }
+        },
+        {
+          "cycle": 1,
+          "mode": "complete",
+          "sample": {
+            "cchMemoryProbe": true,
+            "ts": 1792729180674,
+            "forcedGc": true,
+            "rss": 544063488,
+            "heapTotal": 97779712,
+            "heapUsed": 86990272,
+            "external": 5063541,
+            "arrayBuffers": 537585,
+            "activeTasks": 0,
+            "requestMemory": {
+              "active": 0,
+              "draining": 0,
+              "oldestDrainingAgeMs": 0,
+              "forcedTotal": 0,
+              "drainingLabels": {}
+            }
+          }
+        },
+        {
+          "cycle": 1,
+          "mode": "cancel",
+          "sample": {
+            "cchMemoryProbe": true,
+            "ts": 1792729194759,
+            "forcedGc": true,
+            "rss": 362905600,
+            "heapTotal": 91209728,
+            "heapUsed": 86469576,
+            "external": 5202293,
+            "arrayBuffers": 676337,
+            "activeTasks": 0,
+            "requestMemory": {
+              "active": 0,
+              "draining": 0,
+              "oldestDrainingAgeMs": 0,
+              "forcedTotal": 0,
+              "drainingLabels": {}
+            }
+          }
+        }
+      ],
+      "lifecycle": [
+        {
+          "name": "starting-isolated-services",
+          "ts": 1792729145362
+        },
+        {
+          "name": "migrating-test-database",
+          "ts": 1792729148064
+        },
+        {
+          "name": "creating-test-provider-and-key",
+          "ts": 1792729150451
+        },
+        {
+          "name": "baseline",
+          "ts": 1792729152188
+        },
+        {
+          "name": "complete-0",
+          "ts": 1792729152189
+        },
+        {
+          "name": "complete-0-quiet",
+          "ts": 1792729155241
+        },
+        {
+          "name": "cancel-0",
+          "ts": 1792729160250
+        },
+        {
+          "name": "cancel-0-quiet",
+          "ts": 1792729162727
+        },
+        {
+          "name": "complete-1",
+          "ts": 1792729174246
+        },
+        {
+          "name": "complete-1-quiet",
+          "ts": 1792729176640
+        },
+        {
+          "name": "cancel-1",
+          "ts": 1792729181146
+        },
+        {
+          "name": "cancel-1-quiet",
+          "ts": 1792729183717
+        }
+      ],
+      "scenario": "two-short-cycles",
+      "firstByteMs": {
+        "normalResponseMedian": 417.28612450000037,
+        "normalResponseP95": 1010.4203329999991,
+        "p95Method": "nearest-rank"
+      },
+      "rawEvidenceDirectory": "/var/folders/j6/gdzz1w191bngb1hqjk0sdh_r0000gn/T/cch-memory-W8b6fu"
+    },
+    {
+      "runId": "cch-memory-ce261f0cee",
+      "revision": "f22de1815bf27ad3e86099511d5a325da9843211",
+      "node": "v26.12.1",
+      "concurrency": 32,
+      "waves": 1,
+      "cycles": 1,
+      "payloadBytes": 1048576,
+      "configuration": {
+        "replay": true,
+        "replayMaxDetachedMs": 300000,
+        "providerStreamingIdleTimeoutMs": 600000,
+        "responseDedup": true,
+        "memoryBudgetBytes": 1073741824,
+        "streamGateMode": "enforce",
+        "memoryAdmissionEnabled": false
+      },
+      "normalResponsesVerified": 32,
+      "canceledClients": 32,
+      "mockReceived": 65,
+      "baseline": {
+        "cchMemoryProbe": true,
+        "ts": 1792729235146,
+        "forcedGc": true,
+        "rss": 282116096,
+        "heapTotal": 160022528,
+        "heapUsed": 87045720,
+        "external": 5143264,
+        "arrayBuffers": 603953,
+        "activeTasks": 0,
+        "requestMemory": {
+          "active": 0,
+          "draining": 0,
+          "oldestDrainingAgeMs": 0,
+          "forcedTotal": 0,
+          "drainingLabels": {}
+        }
+      },
+      "final": {
+        "cchMemoryProbe": true,
+        "ts": 1792729543642,
+        "forcedGc": true,
+        "rss": 151175168,
+        "heapTotal": 89112576,
+        "heapUsed": 84619792,
+        "external": 5128641,
+        "arrayBuffers": 602685,
+        "activeTasks": 0,
+        "requestMemory": {
+          "active": 0,
+          "draining": 0,
+          "oldestDrainingAgeMs": 0,
+          "forcedTotal": 1,
+          "drainingLabels": {}
+        }
+      },
+      "peaks": {
+        "rss": 461799424,
+        "heapUsed": 173121680,
+        "external": 65119452,
+        "arrayBuffers": 60593496,
+        "activeTasks": 32
+      },
+      "ledger": {
+        "rows": 65,
+        "completed": 33,
+        "inputTokens": 33,
+        "outputTokens": 33,
+        "costUsd": 9.9e-05
+      },
+      "statusCounts": {
+        "200": 33,
+        "499": 32
+      },
+      "recoveries": [
+        {
+          "cycle": 0,
+          "mode": "complete",
+          "sample": {
+            "cchMemoryProbe": true,
+            "ts": 1792729239400,
+            "forcedGc": true,
+            "rss": 428376064,
+            "heapTotal": 98140160,
+            "heapUsed": 85011408,
+            "external": 5065434,
+            "arrayBuffers": 539478,
+            "activeTasks": 0,
+            "requestMemory": {
+              "active": 0,
+              "draining": 0,
+              "oldestDrainingAgeMs": 0,
+              "forcedTotal": 0,
+              "drainingLabels": {}
+            }
+          }
+        },
+        {
+          "cycle": 0,
+          "mode": "cancel",
+          "sample": {
+            "cchMemoryProbe": true,
+            "ts": 1792729543642,
+            "forcedGc": true,
+            "rss": 151175168,
+            "heapTotal": 89112576,
+            "heapUsed": 84619792,
+            "external": 5128641,
+            "arrayBuffers": 602685,
+            "activeTasks": 0,
+            "requestMemory": {
+              "active": 0,
+              "draining": 0,
+              "oldestDrainingAgeMs": 0,
+              "forcedTotal": 1,
+              "drainingLabels": {}
+            }
+          }
+        }
+      ],
+      "lifecycle": [
+        {
+          "name": "starting-isolated-services",
+          "ts": 1792729231839
+        },
+        {
+          "name": "migrating-test-database",
+          "ts": 1792729232804
+        },
+        {
+          "name": "creating-test-provider-and-key",
+          "ts": 1792729233970
+        },
+        {
+          "name": "baseline",
+          "ts": 1792729235616
+        },
+        {
+          "name": "complete-0",
+          "ts": 1792729235616
+        },
+        {
+          "name": "complete-0-quiet",
+          "ts": 1792729236878
+        },
+        {
+          "name": "cancel-0",
+          "ts": 1792729239881
+        },
+        {
+          "name": "cancel-0-quiet",
+          "ts": 1792729241047
+        }
+      ],
+      "scenario": "default-replay-window",
+      "firstByteMs": {
+        "normalResponseMedian": 385.7818955,
+        "normalResponseP95": 608.2487500000002,
+        "p95Method": "nearest-rank"
+      },
+      "rawEvidenceDirectory": "/var/folders/j6/gdzz1w191bngb1hqjk0sdh_r0000gn/T/cch-memory-B3qFOc"
+    }
+  ]
+}

@@ -50,7 +50,7 @@ describe("k8s deploy review regressions", () => {
   it("documents and enforces the NodePort-safe deployment path", () => {
     const deployScript = readRepoFile("scripts/deploy-k8s.sh");
 
-    expect(deployScript).toContain('DEFAULT_IMAGE="ghcr.io/ding113/claude-code-hub:latest"');
+    expect(deployScript).toContain('DEFAULT_IMAGE="ghcr.io/zhuzhu-debuger/claude-code-hub:latest"');
     expect(deployScript).toContain("默认跟随 main 分支发布镜像");
     expect(deployScript).toContain("分支捷径 默认 main→:latest / dev→:dev");
     expect(deployScript).toContain("NodePort 模式下跳过 app NetworkPolicy");
@@ -105,7 +105,9 @@ describe("k8s deploy review regressions", () => {
     const docs = readRepoFile("docs/k8s-deployment.md");
     const k8sReadme = readRepoFile("deploy/k8s/README.md");
 
-    expect(docs).toContain("默认 k8s 部署保持 `main -> ghcr.io/ding113/claude-code-hub:latest`");
+    expect(docs).toContain(
+      "默认 k8s 部署保持 `main -> ghcr.io/zhuzhu-debuger/claude-code-hub:latest`"
+    );
     expect(docs).toContain("controller 级别配置 forwarded headers / real-ip");
     expect(docs).toContain("allow-snippet-annotations=true");
     expect(docs).toContain("proxy-real-ip-cidr");
@@ -121,7 +123,7 @@ describe("k8s deploy review regressions", () => {
     expect(docs).toContain("```text");
     expect(docs).toContain("```console");
     expect(k8sReadme).toContain(
-      "默认等价 main 分支发布镜像 -> ghcr.io/ding113/claude-code-hub:latest"
+      "默认等价 main 分支发布镜像 -> ghcr.io/zhuzhu-debuger/claude-code-hub:latest"
     );
     expect(k8sReadme).toContain("X-Forwarded-For");
     expect(k8sReadme).toContain("allow-snippet-annotations=false");

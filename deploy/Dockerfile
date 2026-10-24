@@ -1,15 +1,17 @@
 # syntax=docker/dockerfile:1
 
 # 构建阶段：使用真实 Node.js 执行 Next.js，Bun 仅负责包管理和 script 调度
-FROM --platform=$BUILDPLATFORM oven/bun:1.4.3-debian AS bun-runtime
+# Keep dependency installation and the runtime on the target architecture.
+# The local Apple Silicon fallback also publishes linux/amd64 images.
+FROM oven/bun:1.4.3-debian AS bun-runtime
 
-FROM --platform=$BUILDPLATFORM node:26.12.1-trixie-slim AS build-base
+FROM node:26.12.1-trixie-slim AS build-base
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 
 FROM build-base AS deps
-COPY package.json ./
-RUN bun install
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
 FROM deps AS build
 COPY . .

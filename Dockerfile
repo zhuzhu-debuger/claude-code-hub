@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 FROM oven/bun:1.4.3-debian AS deps
 WORKDIR /app
-COPY package.json ./
-RUN bun install
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
 FROM oven/bun:1.4.3-debian AS builder
 WORKDIR /app

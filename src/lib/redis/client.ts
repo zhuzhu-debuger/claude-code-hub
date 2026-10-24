@@ -71,12 +71,11 @@ export function buildRedisOptionsForUrl(redisUrl: string): {
     // Replaying them after reconnect would mutate Redis after the request completed.
     autoResendUnfulfilledCommands: false,
     retryStrategy(times: number) {
-      if (times > 5) {
-        logger.error("[Redis] Max retries reached, giving up");
-        return null; // 停止重试，降级
-      }
-      const delay = Math.min(times * 200, 2000);
-      logger.warn(`[Redis] Retry ${times}/5 after ${delay}ms`);
+      // Keep one reconnecting client during an outage. Ending it after five
+      // attempts lets the next request create a new client and reset the backoff.
+      // Commands still fail immediately because the offline queue is disabled.
+      const delay = Math.min(200 * 2 ** Math.min(times - 1, 8), 30_000);
+      logger.warn("[Redis] Reconnecting", { attempt: times, delayMs: delay });
       return delay;
     },
   };

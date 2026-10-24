@@ -23,7 +23,7 @@ export async function Footer() {
           © {year} CC Hub · v{version}
         </p>
         <Link
-          href="https://github.com/ding113/claude-code-hub"
+          href="https://github.com/zhuzhu-debuger/claude-code-hub"
           target="_blank"
           rel="noopener noreferrer"
           className="transition-colors hover:text-primary"

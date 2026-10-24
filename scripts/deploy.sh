@@ -79,7 +79,7 @@ Examples:
   $0 -y                                 # Update existing deployment (auto-detected)
   $0 --force-new -y                     # Force fresh install even if deployment exists
 
-For more information, visit: https://github.com/ding113/claude-code-hub
+For more information, visit: https://github.com/zhuzhu-debuger/claude-code-hub
 EOF
 }
 
@@ -518,7 +518,7 @@ services:
       start_period: 5s
 
   app:
-    image: ghcr.io/ding113/claude-code-hub:${IMAGE_TAG}
+    image: ghcr.io/zhuzhu-debuger/claude-code-hub:${IMAGE_TAG}
     container_name: claude-code-hub-app-${SUFFIX}
     depends_on:
       postgres:

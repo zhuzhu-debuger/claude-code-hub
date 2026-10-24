@@ -2,9 +2,8 @@
 
 import { getSession } from "@/lib/auth";
 import {
-  getActiveSessionsCache,
+  getOrLoadActiveSessionsCache,
   getSessionDetailsCache,
-  setActiveSessionsCache,
   setSessionDetailsCache,
 } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
@@ -257,157 +256,96 @@ function mergeLegacyResponseAfterSnapshot(
   return snapshot;
 }
 
-/**
- * 获取所有活跃 session 的详细信息（使用聚合数据 + 批量查询 + 缓存）
- * 用于实时监控页面
- *
- * 安全修复：添加用户权限隔离
- */
+async function loadMonitoringSessionStats(key: "active_sessions" | "all_sessions") {
+  return getOrLoadActiveSessionsCache(key, async () => {
+    const { SessionTracker } = await import("@/lib/session-tracker");
+    let sessionIds: string[];
+    if (key === "all_sessions") {
+      const { SessionManager } = await import("@/lib/session-manager");
+      const [observed, stored] = await Promise.all([
+        SessionTracker.getObservedActiveSessions(),
+        SessionManager.getAllSessionIds(),
+      ]);
+      sessionIds = Array.from(new Set([...observed, ...stored]));
+    } else {
+      sessionIds = await SessionTracker.getObservedActiveSessions();
+    }
+    if (sessionIds.length === 0) return [];
+
+    const { aggregateMultipleSessionStats } = await import("@/repository/message");
+    return aggregateMultipleSessionStats(sessionIds);
+  });
+}
+
+function toActiveSessionInfo(
+  session: Awaited<ReturnType<typeof loadMonitoringSessionStats>>[number],
+  concurrentCount: number,
+  now: number
+): ActiveSessionInfo {
+  return {
+    sessionId: session.sessionId,
+    sessionIdentityKind: session.sessionIdentityKind,
+    sessionFingerprint: session.sessionFingerprint,
+    userName: session.userName,
+    userId: session.userId,
+    keyId: session.keyId,
+    keyName: session.keyName,
+    providerId: session.providers[0]?.id || null,
+    providerName: session.providers.map((provider) => provider.name).join(", ") || null,
+    model: session.models.join(", ") || null,
+    apiType: (session.apiType as "chat" | "codex") || "chat",
+    startTime: session.firstRequestAt ? new Date(session.firstRequestAt).getTime() : now,
+    inputTokens: session.totalInputTokens,
+    outputTokens: session.totalOutputTokens,
+    cacheCreationInputTokens: session.totalCacheCreationTokens,
+    cacheReadInputTokens: session.totalCacheReadTokens,
+    totalTokens:
+      session.totalInputTokens +
+      session.totalOutputTokens +
+      session.totalCacheCreationTokens +
+      session.totalCacheReadTokens,
+    costUsd: session.totalCostUsd,
+    status: concurrentCount > 0 ? "in_progress" : "completed",
+    durationMs: session.totalDurationMs,
+    requestCount: session.requestCount,
+    concurrentCount,
+  };
+}
+
+/** Shared aggregate queries remain user-neutral; permission filtering is per caller. */
 export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInfo[]>> {
   try {
-    // 0. 验证用户权限
     const authSession = await getSession();
-    if (!authSession) {
-      return {
-        ok: false,
-        error: "未登录",
-      };
-    }
+    if (!authSession) return { ok: false, error: "未登录" };
 
-    const isAdmin = authSession.user.role === "admin";
-    const currentUserId = authSession.user.id;
+    const sessionsData = await loadMonitoringSessionStats("active_sessions");
+    const filteredSessions =
+      authSession.user.role === "admin"
+        ? sessionsData
+        : sessionsData.filter((session) => session.userId === authSession.user.id);
+    if (filteredSessions.length === 0) return { ok: true, data: [] };
 
-    // 1. 尝试从缓存获取
-    const cached = getActiveSessionsCache();
-    if (cached) {
-      logger.debug("[SessionCache] Active sessions cache hit");
-
-      // 过滤：管理员可查看所有，普通用户只能查看自己的
-      const filteredData = isAdmin ? cached : cached.filter((s) => s.userId === currentUserId);
-
-      // 获取并发计数（即使缓存命中也需要实时获取）
-      const { SessionTracker } = await import("@/lib/session-tracker");
-      const cachedSessionIds = filteredData.map((s) => s.sessionId);
-      const concurrentCounts =
-        await SessionTracker.getObservedConcurrentCountBatch(cachedSessionIds);
-
-      return {
-        ok: true,
-        data: filteredData.map((s) => {
-          const concurrentCount = concurrentCounts.get(s.sessionId) ?? 0;
-          return {
-            sessionId: s.sessionId,
-            sessionIdentityKind: s.sessionIdentityKind,
-            sessionFingerprint: s.sessionFingerprint,
-            userName: s.userName,
-            userId: s.userId,
-            keyId: s.keyId,
-            keyName: s.keyName,
-            providerId: s.providers[0]?.id || null,
-            providerName: s.providers.map((p) => p.name).join(", ") || null,
-            model: s.models.join(", ") || null,
-            apiType: (s.apiType as "chat" | "codex") || "chat",
-            startTime: s.firstRequestAt ? new Date(s.firstRequestAt).getTime() : Date.now(),
-            inputTokens: s.totalInputTokens,
-            outputTokens: s.totalOutputTokens,
-            cacheCreationInputTokens: s.totalCacheCreationTokens,
-            cacheReadInputTokens: s.totalCacheReadTokens,
-            totalTokens:
-              s.totalInputTokens +
-              s.totalOutputTokens +
-              s.totalCacheCreationTokens +
-              s.totalCacheReadTokens,
-            costUsd: s.totalCostUsd,
-            status: concurrentCount > 0 ? "in_progress" : "completed",
-            durationMs: s.totalDurationMs,
-            requestCount: s.requestCount,
-            concurrentCount,
-          };
-        }),
-      };
-    }
-
-    // 2. 从 SessionTracker 获取活跃 session ID 列表
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const sessionIds = await SessionTracker.getObservedActiveSessions();
-
-    if (sessionIds.length === 0) {
-      return { ok: true, data: [] };
-    }
-
-    // 3. 使用批量聚合查询（性能优化）
-    const { aggregateMultipleSessionStats } = await import("@/repository/message");
-    const sessionsData = await aggregateMultipleSessionStats(sessionIds);
-
-    // 3.1 批量获取并发计数（用于实时状态计算）
-    const allSessionIds = sessionsData.map((s) => s.sessionId);
-    const concurrentCounts = await SessionTracker.getObservedConcurrentCountBatch(allSessionIds);
-
-    // 4. 写入缓存
-    setActiveSessionsCache(sessionsData);
-
-    // 5. 过滤：管理员可查看所有，普通用户只能查看自己的
-    const filteredSessions = isAdmin
-      ? sessionsData
-      : sessionsData.filter((s) => s.userId === currentUserId);
-
-    // 6. 转换格式
-    const sessions: ActiveSessionInfo[] = filteredSessions.map((s) => {
-      const concurrentCount = concurrentCounts.get(s.sessionId) ?? 0;
-      return {
-        sessionId: s.sessionId,
-        sessionIdentityKind: s.sessionIdentityKind,
-        sessionFingerprint: s.sessionFingerprint,
-        userName: s.userName,
-        userId: s.userId,
-        keyId: s.keyId,
-        keyName: s.keyName,
-        providerId: s.providers[0]?.id || null,
-        providerName: s.providers.map((p) => p.name).join(", ") || null,
-        model: s.models.join(", ") || null,
-        apiType: (s.apiType as "chat" | "codex") || "chat",
-        startTime: s.firstRequestAt ? new Date(s.firstRequestAt).getTime() : Date.now(),
-        inputTokens: s.totalInputTokens,
-        outputTokens: s.totalOutputTokens,
-        cacheCreationInputTokens: s.totalCacheCreationTokens,
-        cacheReadInputTokens: s.totalCacheReadTokens,
-        totalTokens:
-          s.totalInputTokens +
-          s.totalOutputTokens +
-          s.totalCacheCreationTokens +
-          s.totalCacheReadTokens,
-        costUsd: s.totalCostUsd,
-        status: concurrentCount > 0 ? "in_progress" : "completed",
-        durationMs: s.totalDurationMs,
-        requestCount: s.requestCount,
-        concurrentCount,
-      };
-    });
-
-    logger.debug(
-      `[SessionCache] Active sessions fetched and cached, count: ${sessions.length} (filtered for user: ${currentUserId})`
+    const concurrentCounts = await SessionTracker.getObservedConcurrentCountBatch(
+      filteredSessions.map((session) => session.sessionId)
     );
-
-    return { ok: true, data: sessions };
+    const now = Date.now();
+    return {
+      ok: true,
+      data: filteredSessions.map((session) =>
+        toActiveSessionInfo(session, concurrentCounts.get(session.sessionId) ?? 0, now)
+      ),
+    };
   } catch (error) {
     logger.error("Failed to get active sessions:", error);
-    return {
-      ok: false,
-      error: "获取活跃 session 失败",
-    };
+    return { ok: false, error: "获取活跃 session 失败" };
   }
 }
 
 /**
- * 获取所有 session（包括活跃和非活跃的）- 支持分页
- * 用于实时监控页面的完整视图
- *
- * 修复：统一使用数据库聚合查询，确保与其他页面数据一致
- * 安全修复：添加用户权限隔离
- *
- * @param activePage - 活跃 session 页码（从 1 开始）
- * @param inactivePage - 非活跃 session 页码（从 1 开始）
- * @param pageSize - 每页数量（默认 20）
+ * Return paginated monitoring data without constructing off-page detail objects.
+ * Concurrent callers share the Redis scan and database aggregate, while observed
+ * concurrency is refreshed for each caller, including cache hits.
  */
 export async function getAllSessions(
   activePage: number = 1,
@@ -423,7 +361,6 @@ export async function getAllSessions(
     hasMoreInactive: boolean;
   }>
 > {
-  // Input validation: ensure page numbers and pageSize are positive integers
   const safeActivePage = Math.max(1, Number.isFinite(activePage) ? Math.floor(activePage) : 1);
   const safeInactivePage = Math.max(
     1,
@@ -435,215 +372,60 @@ export async function getAllSessions(
   );
 
   try {
-    // 0. 验证用户权限
     const authSession = await getSession();
-    if (!authSession) {
-      return {
-        ok: false,
-        error: "未登录",
-      };
-    }
+    if (!authSession) return { ok: false, error: "未登录" };
 
-    const isAdmin = authSession.user.role === "admin";
-    const currentUserId = authSession.user.id;
-
-    // 1. 尝试从缓存获取（使用不同的 key）
-    const cacheKey = "all_sessions";
-    const cached = getActiveSessionsCache(cacheKey);
-    if (cached) {
-      logger.debug("[SessionCache] All sessions cache hit");
-
-      const { SessionTracker } = await import("@/lib/session-tracker");
-
-      // 过滤：管理员可查看所有，普通用户只能查看自己的
-      const filteredCached = isAdmin ? cached : cached.filter((s) => s.userId === currentUserId);
-      const concurrentCounts = await SessionTracker.getObservedConcurrentCountBatch(
-        filteredCached.map((s) => s.sessionId)
-      );
-
-      // 分离活跃和非活跃（5 分钟内有请求为活跃）
-      const now = Date.now();
-      const fiveMinutesAgo = now - 5 * 60 * 1000;
-
-      const active: ActiveSessionInfo[] = [];
-      const inactive: ActiveSessionInfo[] = [];
-
-      for (const s of filteredCached) {
-        const lastRequestTime = s.lastRequestAt ? new Date(s.lastRequestAt).getTime() : 0;
-        const concurrentCount = concurrentCounts.get(s.sessionId) ?? 0;
-        const sessionInfo: ActiveSessionInfo = {
-          sessionId: s.sessionId,
-          sessionIdentityKind: s.sessionIdentityKind,
-          sessionFingerprint: s.sessionFingerprint,
-          userName: s.userName,
-          userId: s.userId,
-          keyId: s.keyId,
-          keyName: s.keyName,
-          providerId: s.providers[0]?.id || null,
-          providerName: s.providers.map((p) => p.name).join(", ") || null,
-          model: s.models.join(", ") || null,
-          apiType: (s.apiType as "chat" | "codex") || "chat",
-          startTime: s.firstRequestAt ? new Date(s.firstRequestAt).getTime() : Date.now(),
-          inputTokens: s.totalInputTokens,
-          outputTokens: s.totalOutputTokens,
-          cacheCreationInputTokens: s.totalCacheCreationTokens,
-          cacheReadInputTokens: s.totalCacheReadTokens,
-          totalTokens:
-            s.totalInputTokens +
-            s.totalOutputTokens +
-            s.totalCacheCreationTokens +
-            s.totalCacheReadTokens,
-          costUsd: s.totalCostUsd,
-          status: concurrentCount > 0 ? "in_progress" : "completed",
-          durationMs: s.totalDurationMs,
-          requestCount: s.requestCount,
-          concurrentCount,
-        };
-
-        const isConcurrent = concurrentCount > 0;
-        if (isConcurrent || lastRequestTime >= fiveMinutesAgo) {
-          active.push(sessionInfo);
-        } else {
-          inactive.push(sessionInfo);
-        }
-      }
-
-      // 应用分页
-      const totalActive = active.length;
-      const totalInactive = inactive.length;
-      const activeOffset = (safeActivePage - 1) * safePageSize;
-      const inactiveOffset = (safeInactivePage - 1) * safePageSize;
-      const paginatedActive = active.slice(activeOffset, activeOffset + safePageSize);
-      const paginatedInactive = inactive.slice(inactiveOffset, inactiveOffset + safePageSize);
-
-      return {
-        ok: true,
-        data: {
-          active: paginatedActive,
-          inactive: paginatedInactive,
-          totalActive,
-          totalInactive,
-          hasMoreActive: activeOffset + paginatedActive.length < totalActive,
-          hasMoreInactive: inactiveOffset + paginatedInactive.length < totalInactive,
-        },
-      };
-    }
-
-    // 2. 从 Redis 获取所有 session ID（包括活跃和非活跃）
-    const { SessionManager } = await import("@/lib/session-manager");
+    const sessionsData = await loadMonitoringSessionStats("all_sessions");
+    const filteredSessions =
+      authSession.user.role === "admin"
+        ? sessionsData
+        : sessionsData.filter((session) => session.userId === authSession.user.id);
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const [observedSessionIds, storedSessionIds] = await Promise.all([
-      SessionTracker.getObservedActiveSessions(),
-      SessionManager.getAllSessionIds(),
-    ]);
-    const allSessionIds = Array.from(new Set([...observedSessionIds, ...storedSessionIds]));
-
-    if (allSessionIds.length === 0) {
-      return {
-        ok: true,
-        data: {
-          active: [],
-          inactive: [],
-          totalActive: 0,
-          totalInactive: 0,
-          hasMoreActive: false,
-          hasMoreInactive: false,
-        },
-      };
-    }
-
-    // 3. 使用批量聚合查询（性能优化）
-    const { aggregateMultipleSessionStats } = await import("@/repository/message");
-    const sessionsData = await aggregateMultipleSessionStats(allSessionIds);
-
-    const concurrentCounts = await SessionTracker.getObservedConcurrentCountBatch(
-      sessionsData.map((s) => s.sessionId)
-    );
-
-    // 4. 写入缓存
-    setActiveSessionsCache(sessionsData, cacheKey);
-
-    // 5. 过滤：管理员可查看所有，普通用户只能查看自己的
-    const filteredSessions = isAdmin
-      ? sessionsData
-      : sessionsData.filter((s) => s.userId === currentUserId);
-
-    // 6. 分离活跃和非活跃（5 分钟内有请求为活跃）
+    const concurrentCounts =
+      filteredSessions.length === 0
+        ? new Map<string, number>()
+        : await SessionTracker.getObservedConcurrentCountBatch(
+            filteredSessions.map((session) => session.sessionId)
+          );
     const now = Date.now();
     const fiveMinutesAgo = now - 5 * 60 * 1000;
-
-    const active: ActiveSessionInfo[] = [];
-    const inactive: ActiveSessionInfo[] = [];
-
-    for (const s of filteredSessions) {
-      const lastRequestTime = s.lastRequestAt ? new Date(s.lastRequestAt).getTime() : 0;
-      const concurrentCount = concurrentCounts.get(s.sessionId) ?? 0;
-      const sessionInfo: ActiveSessionInfo = {
-        sessionId: s.sessionId,
-        sessionIdentityKind: s.sessionIdentityKind,
-        sessionFingerprint: s.sessionFingerprint,
-        userName: s.userName,
-        userId: s.userId,
-        keyId: s.keyId,
-        keyName: s.keyName,
-        providerId: s.providers[0]?.id || null,
-        providerName: s.providers.map((p) => p.name).join(", ") || null,
-        model: s.models.join(", ") || null,
-        apiType: (s.apiType as "chat" | "codex") || "chat",
-        startTime: s.firstRequestAt ? new Date(s.firstRequestAt).getTime() : Date.now(),
-        inputTokens: s.totalInputTokens,
-        outputTokens: s.totalOutputTokens,
-        cacheCreationInputTokens: s.totalCacheCreationTokens,
-        cacheReadInputTokens: s.totalCacheReadTokens,
-        totalTokens:
-          s.totalInputTokens +
-          s.totalOutputTokens +
-          s.totalCacheCreationTokens +
-          s.totalCacheReadTokens,
-        costUsd: s.totalCostUsd,
-        status: concurrentCount > 0 ? "in_progress" : "completed",
-        durationMs: s.totalDurationMs,
-        requestCount: s.requestCount,
-        concurrentCount,
-      };
-
-      const isConcurrent = concurrentCount > 0;
-      if (isConcurrent || lastRequestTime >= fiveMinutesAgo) {
-        active.push(sessionInfo);
-      } else {
-        inactive.push(sessionInfo);
-      }
-    }
-
-    logger.debug(
-      `[SessionCache] All sessions fetched and cached, active: ${active.length}, inactive: ${inactive.length} (filtered for user: ${currentUserId})`
-    );
-
-    // 7. 应用分页
-    const totalActive = active.length;
-    const totalInactive = inactive.length;
     const activeOffset = (safeActivePage - 1) * safePageSize;
     const inactiveOffset = (safeInactivePage - 1) * safePageSize;
-    const paginatedActive = active.slice(activeOffset, activeOffset + safePageSize);
-    const paginatedInactive = inactive.slice(inactiveOffset, inactiveOffset + safePageSize);
+    const active: ActiveSessionInfo[] = [];
+    const inactive: ActiveSessionInfo[] = [];
+    let totalActive = 0;
+    let totalInactive = 0;
+
+    for (const session of filteredSessions) {
+      const lastRequestTime = session.lastRequestAt ? new Date(session.lastRequestAt).getTime() : 0;
+      const concurrentCount = concurrentCounts.get(session.sessionId) ?? 0;
+      if (concurrentCount > 0 || lastRequestTime >= fiveMinutesAgo) {
+        const index = totalActive++;
+        if (index >= activeOffset && active.length < safePageSize) {
+          active.push(toActiveSessionInfo(session, concurrentCount, now));
+        }
+      } else {
+        const index = totalInactive++;
+        if (index >= inactiveOffset && inactive.length < safePageSize) {
+          inactive.push(toActiveSessionInfo(session, concurrentCount, now));
+        }
+      }
+    }
 
     return {
       ok: true,
       data: {
-        active: paginatedActive,
-        inactive: paginatedInactive,
+        active,
+        inactive,
         totalActive,
         totalInactive,
-        hasMoreActive: activeOffset + paginatedActive.length < totalActive,
-        hasMoreInactive: inactiveOffset + paginatedInactive.length < totalInactive,
+        hasMoreActive: activeOffset + active.length < totalActive,
+        hasMoreInactive: inactiveOffset + inactive.length < totalInactive,
       },
     };
   } catch (error) {
     logger.error("Failed to get all sessions:", error);
-    return {
-      ok: false,
-      error: "获取 session 列表失败",
-    };
+    return { ok: false, error: "获取 session 列表失败" };
   }
 }
 
